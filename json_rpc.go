@@ -14,13 +14,17 @@ type JsonRpcClientConfig struct {
 	Host     string
 	Username string
 	Password string
+
+	// override the default http client
+	Client *http.Client
 }
 
 func NewJsonRpcClient(conf JsonRpcClientConfig) JsonRpcClient {
-	return JsonRpcClient{conf: conf, httpClient: http.DefaultClient}
-}
+	client := http.DefaultClient
+	if conf.Client != nil {
+		client = conf.Client
+	}
 
-func NewJsonRpcClientWithHTTPClient(conf JsonRpcClientConfig, client *http.Client) JsonRpcClient {
 	return JsonRpcClient{conf: conf, httpClient: client}
 }
 
