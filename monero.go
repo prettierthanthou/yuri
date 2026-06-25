@@ -2,7 +2,6 @@ package yuri
 
 import (
 	"context"
-	"errors"
 	"math/big"
 )
 
@@ -46,54 +45,28 @@ func (m monero) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, error)
 
 		invoice := invoices[i]
 
-		resp, err := m.jsonRpc.Do(JsonRpcRequest{
+		type getAddrIndexResp struct {
+			Index struct {
+				Major uint64 `json:"major"`
+				Minor uint64 `json:"minor"`
+			} `json:"index"`
+		}
+
+		var resp getAddrIndexResp
+		err := RPCDo(m.jsonRpc, JsonRpcRequest{
 			Method: "get_address_index",
 			Params: map[string]any{
 				"address": invoice.Address,
 			},
-		})
+		}, &resp)
 		if err != nil {
 			return nil, err
 		}
 
-		indexRaw, ok := resp.Result["index"]
-		if !ok {
-			return nil, errors.New("jsonrpc did not return index on get_address_index request")
-		}
-
-		index, ok := indexRaw.(map[string]any)
-		if !ok {
-			return nil, errors.New("failed to cast index from get_address_index")
-		}
-
-		majorRaw, ok := index["major"]
-		if !ok {
-			return nil, errors.New("missing major from get_address_index")
-		}
-
-		minorRaw, ok := index["minor"]
-		if !ok {
-			return nil, errors.New("missing minor from get_address_index")
-		}
-
-		majorFloat, ok := majorRaw.(float64)
-		if !ok {
-			return nil, errors.New("failed to cast major from get_address_index")
-		}
-
-		minorFloat, ok := minorRaw.(float64)
-		if !ok {
-			return nil, errors.New("failed to cast minor from get_address_index")
-		}
-
-		major := uint64(majorFloat)
-		minor := uint64(minorFloat)
-
-		addressSpaces[major] = append(addressSpaces[major], minor)
-
+		addressSpaces[resp.Index.Major] = append(addressSpaces[resp.Index.Major], resp.Index.Minor)
 		invoiceBySubaddr[subaddr{
-			major: major,
-			minor: minor,
+			major: resp.Index.Major,
+			minor: resp.Index.Minor,
 		}] = i
 	}
 
@@ -106,77 +79,38 @@ func (m monero) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, error)
 		default:
 		}
 
-		resp, err := m.jsonRpc.Do(JsonRpcRequest{
+		type getBalanceResult struct {
+			PerSubaddress []struct {
+				AddressIndex    uint64 `json:"address_index"`
+				Balance         uint64 `json:"balance"`
+				UnlockedBalance uint64 `json:"unlocked_balance"`
+			} `json:"per_subaddress"`
+		}
+
+		var balanceResult getBalanceResult
+		err := RPCDo(m.jsonRpc, JsonRpcRequest{
 			Method: "get_balance",
 			Params: map[string]any{
 				"account_index":   major,
 				"address_indices": minors,
 			},
-		})
+		}, &balanceResult)
 		if err != nil {
 			return nil, err
 		}
 
-		perSubaddressRaw, ok := resp.Result["per_subaddress"]
-		if !ok {
-			return nil, errors.New("jsonrpc did not return per_subaddress on get_balance")
-		}
-
-		perSubaddress, ok := perSubaddressRaw.([]any)
-		if !ok {
-			return nil, errors.New("failed to cast per_subaddress from get_balance")
-		}
-
-		for _, raw := range perSubaddress {
-			sub, ok := raw.(map[string]any)
-			if !ok {
-				continue
-			}
-
-			addressIndexRaw, ok := sub["address_index"]
-			if !ok {
-				continue
-			}
-
-			addressIndexFloat, ok := addressIndexRaw.(float64)
-			if !ok {
-				continue
-			}
-
+		for _, subaddress := range balanceResult.PerSubaddress {
 			idx, ok := invoiceBySubaddr[subaddr{
 				major: major,
-				minor: uint64(addressIndexFloat),
+				minor: uint64(subaddress.AddressIndex),
 			}]
 			if !ok {
 				continue
 			}
 
 			updated := invoices[idx].Clone()
-
-			balanceRaw, ok := sub["balance"]
-			if !ok {
-				continue
-			}
-
-			balanceFloat, ok := balanceRaw.(float64)
-			if !ok {
-				continue
-			}
-
-			unlockedRaw, ok := sub["unlocked_balance"]
-			if !ok {
-				continue
-			}
-
-			unlockedFloat, ok := unlockedRaw.(float64)
-			if !ok {
-				continue
-			}
-
-			balance := uint64(balanceFloat)
-			unlocked := uint64(unlockedFloat)
-			updated.AmountPaid = new(big.Int).SetUint64(balance)
-			updated.Pending = (updated.AmountPaid.Cmp(updated.AmountOwed) >= 0) && !(new(big.Int).SetUint64(unlocked).Cmp(updated.AmountOwed) >= 0)
+			updated.AmountPaid = new(big.Int).SetUint64(subaddress.Balance)
+			updated.Pending = (updated.AmountPaid.Cmp(updated.AmountOwed) >= 0) && !(new(big.Int).SetUint64(subaddress.UnlockedBalance).Cmp(updated.AmountOwed) >= 0)
 
 			newInvoices = append(newInvoices, updated)
 		}
@@ -187,25 +121,25 @@ func (m monero) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, error)
 
 // CreateAddress implements [CryptoProvider].
 func (m monero) CreateAddress() (string, error) {
-	resp, err := m.jsonRpc.Do(JsonRpcRequest{
+	type createAddressResp struct {
+		Address string `json:"address"`
+	}
+
+	var resp createAddressResp
+	err := RPCDo(m.jsonRpc, JsonRpcRequest{
 		Method: "create_address",
 		Params: map[string]any{
 			"account_index": 0,
 			"label":         "yuri CreateAddress",
 			"count":         1,
 		},
-	})
+	}, &resp)
 
 	if err != nil {
 		return "", err
 	}
 
-	addr, ok := resp.Result["address"]
-	if !ok {
-		return "", errors.New("missing address in jsonrpc result")
-	}
-
-	return addr.(string), nil
+	return resp.Address, nil
 }
 
 // Chain implements [CryptoProvider].

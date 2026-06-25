@@ -137,24 +137,23 @@ func TestMoneroCreateAddress(t *testing.T) {
 		t.Fatalf("CreateAddress err = %q", err)
 	}
 
-	res, err := walletJsonRpc.Do(JsonRpcRequest{
+	type getAddrIndexResp struct {
+		Index struct {
+			Major uint64 `json:"major"`
+			Minor uint64 `json:"minor"`
+		} `json:"index"`
+	}
+
+	var resp getAddrIndexResp
+	err = RPCDo(walletJsonRpc, JsonRpcRequest{
 		Method: "get_address_index",
 		Params: map[string]any{
 			"address": addr,
 		},
-	})
-
+	}, &resp)
 	if err != nil {
-		t.Fatalf("get_address_index err = %q", err)
+		t.Fatalf("get_address_index = %q", err)
 	}
-
-	result, ok := res.Result["index"]
-	if !ok {
-		t.Fatalf("result['index'] does not exist")
-	}
-
-	t.Logf("address = %q", addr)
-	t.Logf("account index = %q", result)
 }
 
 func moneroGenerateBlocks(t *testing.T, daemonRpc JsonRpcClient, addr string, blocks uint64) {
@@ -176,23 +175,23 @@ func moneroGenerateBlocks(t *testing.T, daemonRpc JsonRpcClient, addr string, bl
 func TestMoneroPoll(t *testing.T) {
 	_, _, _, merchantJsonRpc, customerJsonRpc, daemonJsonRpc := moneroHelperCreateFullEnv(t)
 
-	resp, err := customerJsonRpc.Do(JsonRpcRequest{
+	type getAddress struct {
+		Address string `json:"address"`
+	}
+
+	var getCustomerAddressResp getAddress
+	err := RPCDo(customerJsonRpc, JsonRpcRequest{
 		Method: "get_address",
 		Params: map[string]any{
 			"account_index": 0,
 			"address_index": 0,
 		},
-	})
+	}, &getCustomerAddressResp)
 	if err != nil {
 		t.Fatalf("get_address(customer) = %q", err)
 	}
 
-	customerAddr, ok := resp.Result["address"].(string)
-	if !ok {
-		t.Fatalf("get_address(customer) = failed to get address from result")
-	}
-
-	moneroGenerateBlocks(t, daemonJsonRpc, customerAddr, 30)
+	moneroGenerateBlocks(t, daemonJsonRpc, getCustomerAddressResp.Address, 30)
 
 	monero := NewMonero(merchantJsonRpc.conf)
 	merchantAddr, err := monero.CreateAddress()
@@ -235,7 +234,7 @@ func TestMoneroPoll(t *testing.T) {
 		t.Fatalf("transfer(customer) = %q", err)
 	}
 
-	moneroGenerateBlocks(t, daemonJsonRpc, customerAddr, 1)
+	moneroGenerateBlocks(t, daemonJsonRpc, getCustomerAddressResp.Address, 1)
 	merchantJsonRpc.Do(JsonRpcRequest{
 		Method: "refresh",
 	})
@@ -249,7 +248,7 @@ func TestMoneroPoll(t *testing.T) {
 		t.Fatalf("Invoice should be pending after 1 conf")
 	}
 
-	moneroGenerateBlocks(t, daemonJsonRpc, customerAddr, 9)
+	moneroGenerateBlocks(t, daemonJsonRpc, getCustomerAddressResp.Address, 9)
 	merchantJsonRpc.Do(JsonRpcRequest{
 		Method: "refresh",
 	})

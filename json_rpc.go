@@ -51,7 +51,7 @@ type JsonRpcResponse struct {
 	JsonRPC string `json:"jsonrpc"`
 
 	// mutually exclusive with Error
-	Result map[string]any `json:"result"`
+	Result json.RawMessage `json:"result"`
 	// mutually exclusive with Result
 	Error jsonRpcError `json:"error"`
 
@@ -76,6 +76,20 @@ type jsonRpcError struct {
 	Data map[string]any `json:"data,omitempty"`
 }
 
+func RPCDo(
+	client JsonRpcClient,
+	req JsonRpcRequest,
+	out any,
+) error {
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+
+	return json.Unmarshal(resp.Result, out)
+}
+
+// You generally want to use RPCDo instead for an easier life.
 func (c JsonRpcClient) Do(request JsonRpcRequest) (JsonRpcResponse, error) {
 	rid := request.Id
 	if rid == "" {
