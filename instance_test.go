@@ -316,7 +316,7 @@ func TestAvgPrice(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	price, err := instance.AvgPrice(
+	price, err := instance.avgPrice(
 		USD,
 		"test",
 		Token{},
@@ -346,7 +346,7 @@ func TestAvgPriceIgnoresFailedProviders(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	price, err := instance.AvgPrice(
+	price, err := instance.avgPrice(
 		USD,
 		"test",
 		Token{},
@@ -375,7 +375,7 @@ func TestAvgPriceAllProvidersFail(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = instance.AvgPrice(
+	_, err = instance.avgPrice(
 		USD,
 		"test",
 		Token{},
