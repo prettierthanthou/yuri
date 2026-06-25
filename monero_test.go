@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"codeberg.org/lewdest/yuri/yuritest"
 	"github.com/testcontainers/testcontainers-go"
@@ -172,7 +173,14 @@ func moneroGenerateBlocks(t *testing.T, daemonRpc JsonRpcClient, addr string, bl
 	}
 }
 
-func TestMoneroPoll(t *testing.T) {
+// this test is explicitly named different so that
+// running it when attempting to run the Monero tests
+// is less likely (via --run)
+//
+// TODO: fix the fact this takes ~20 seconds to run.
+// this aids. not my main issue right now though.
+
+func TestPollMonero(t *testing.T) {
 	_, _, _, merchantJsonRpc, customerJsonRpc, daemonJsonRpc := moneroHelperCreateFullEnv(t)
 
 	type getAddress struct {
@@ -191,7 +199,9 @@ func TestMoneroPoll(t *testing.T) {
 		t.Fatalf("get_address(customer) = %q", err)
 	}
 
+	start := time.Now()
 	moneroGenerateBlocks(t, daemonJsonRpc, getCustomerAddressResp.Address, 30)
+	t.Log("30 blocks:", time.Since(start))
 
 	monero := NewMonero(merchantJsonRpc.conf)
 	merchantAddr, err := monero.CreateAddress()
@@ -218,6 +228,7 @@ func TestMoneroPoll(t *testing.T) {
 		t.Fatalf("Poll() should have returned 1 invoice back")
 	}
 
+	start = time.Now()
 	_, err = customerJsonRpc.Do(JsonRpcRequest{
 		Method: "transfer",
 		Params: map[string]any{
@@ -230,14 +241,24 @@ func TestMoneroPoll(t *testing.T) {
 		},
 	})
 
+	customerJsonRpc.Do(JsonRpcRequest{
+		Method: "refresh",
+	})
+	t.Log("transfer + refresh:", time.Since(start))
+
 	if err != nil {
 		t.Fatalf("transfer(customer) = %q", err)
 	}
 
+	start = time.Now()
 	moneroGenerateBlocks(t, daemonJsonRpc, getCustomerAddressResp.Address, 1)
+	t.Log("1 block:", time.Since(start))
+
+	start = time.Now()
 	merchantJsonRpc.Do(JsonRpcRequest{
 		Method: "refresh",
 	})
+	t.Log("merchantJsonRpc refresh:", time.Since(start))
 
 	invoices, err = monero.Poll(t.Context(), invoices)
 	if err != nil {
@@ -248,11 +269,15 @@ func TestMoneroPoll(t *testing.T) {
 		t.Fatalf("Invoice should be pending after 1 conf")
 	}
 
+	start = time.Now()
 	moneroGenerateBlocks(t, daemonJsonRpc, getCustomerAddressResp.Address, 9)
+	t.Log("1 block:", time.Since(start))
+
+	start = time.Now()
 	merchantJsonRpc.Do(JsonRpcRequest{
 		Method: "refresh",
 	})
-
+	t.Log("merchantJsonRpc refresh:", time.Since(start))
 	invoices, err = monero.Poll(t.Context(), invoices)
 	if err != nil {
 		t.Fatalf("Poll3() = %q", err)
