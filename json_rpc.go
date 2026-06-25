@@ -1,0 +1,134 @@
+package yuri
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"math/rand"
+	"net/http"
+	"strconv"
+)
+
+type JsonRpcClientConfig struct {
+	Host     string
+	Username string
+	Password string
+}
+
+func NewJsonRpcClient(conf JsonRpcClientConfig) JsonRpcClient {
+	return JsonRpcClient{conf: conf, httpClient: http.DefaultClient}
+}
+
+func NewJsonRpcClientWithHTTPClient(conf JsonRpcClientConfig, client *http.Client) JsonRpcClient {
+	return JsonRpcClient{conf: conf, httpClient: client}
+}
+
+// JsonRpcClient is a small JSON-RPC 2.0 client
+// this client does not support batching.
+//
+// Impls https://www.simple-is-better.org/json-rpc/transport_http.html
+type JsonRpcClient struct {
+	conf       JsonRpcClientConfig
+	httpClient *http.Client
+}
+
+const jsonRpcVersion = "2.0"
+
+type JsonRpcRequest struct {
+	// Must be exactly 2.0
+	JsonRPC string `json:"jsonrpc"`
+	Method  string `json:"method"`
+	// NOTE: while params *can* be an array in the official
+	// specification, we stick to objects here for clarity.
+	Params map[string]any `json:"params"`
+	// if ID is omitted this request is a Notification
+	Id string `json:"id,omitempty"`
+}
+
+type JsonRpcResponse struct {
+	// Must be exactly 2.0
+	JsonRPC string `json:"jsonrpc"`
+
+	// mutually exclusive with Error
+	Result map[string]any `json:"result"`
+	// mutually exclusive with Result
+	Error jsonRpcError `json:"error"`
+
+	// can be nullable if there was no id in
+	// the request object
+	Id string `json:"id,omitempty"`
+}
+
+const (
+	JsonRPCParseError          = -32700
+	JsonRPCInvalidRequestError = -32600
+	JsonRPCMethodNotFoundError = -32601
+	JsonRPCInvalidParamsError  = -32602
+	JsonRPCInternalErrorError  = -32603
+	// [-32000 to -32099] Server Error
+)
+
+type jsonRpcError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	// Data can be nullable/empty
+	Data map[string]any `json:"data,omitempty"`
+}
+
+func (c JsonRpcClient) Do(request JsonRpcRequest) (JsonRpcResponse, error) {
+	rid := request.Id
+	if rid == "" {
+		rid = strconv.FormatInt(int64(rand.Int()), 10)
+	}
+
+	body, err := json.Marshal(JsonRpcRequest{
+		JsonRPC: jsonRpcVersion,
+		Method:  request.Method,
+		Params:  request.Params,
+		Id:      rid,
+	})
+	if err != nil {
+		return JsonRpcResponse{}, err
+	}
+
+	req, err := http.NewRequest("POST", c.conf.Host, bytes.NewBuffer(body))
+	if err != nil {
+		return JsonRpcResponse{}, err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	if c.conf.Username != "" && c.conf.Password != "" {
+		// NOTE: we do not use SetBasicAuth here as it base64 encodes
+		// the username:password which... is RETARDED.
+		// this took 10 minutes to determine why monero_test.go was failing to communicate
+		// to RPC when auth was enabled.
+		req.Header.Set("Authorization", fmt.Sprintf("%s:%s", c.conf.Username, c.conf.Password))
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return JsonRpcResponse{}, err
+	}
+
+	defer resp.Body.Close()
+	readBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return JsonRpcResponse{}, err
+	}
+
+	parsedResponse := JsonRpcResponse{}
+	if err := json.Unmarshal(readBody, &parsedResponse); err != nil {
+		return JsonRpcResponse{}, err
+	}
+
+	if parsedResponse.Id != rid {
+		return JsonRpcResponse{}, fmt.Errorf("recieved jsonrpc response but id didn't match expected %s but recieved %s", rid, parsedResponse.Id)
+	}
+
+	if parsedResponse.Error.Code != 0 {
+		return JsonRpcResponse{}, fmt.Errorf("jsonrpc request landed but failed: %+v", parsedResponse.Error)
+	}
+
+	return parsedResponse, nil
+}

@@ -1,0 +1,18 @@
+# yuri
+
+simple, sweet, and quick library for handling cryptocurrencies in go
+
+#### quickstart:
+[examples](#examples)
+[references](#references)
+
+
+
+### examples
+TODO: im so llaaalalazzyzyyy
+
+### references
+
+- [monero daemon docker](https://hub.docker.com/r/melotools/monero)
+- [bitcoin daemon docker](https://hub.docker.com/r/bitcoin/bitcoin)
+- [eth setup maybe](https://ethereum.stackexchange.com/questions/125/how-do-i-set-up-a-private-ethereum-network)
