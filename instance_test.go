@@ -96,7 +96,7 @@ func (t *testingFakeCryptoProvider) Chain() Chain {
 }
 
 // CreateAddress implements [CryptoProvider].
-func (t *testingFakeCryptoProvider) CreateAddress() (string, error) {
+func (t *testingFakeCryptoProvider) CreateAddress(context.Context) (string, error) {
 	return "fake_test_addr", nil
 }
 
@@ -482,6 +482,8 @@ func (p *pollStorage) UpdateInvoices(
 	return p.updateErr
 }
 
+var _ CryptoProvider = &pollProvider{}
+
 type pollProvider struct {
 	updated []Invoice
 	err     error
@@ -501,7 +503,7 @@ func (p *pollProvider) Chain() Chain {
 	return Chain("test")
 }
 
-func (p *pollProvider) CreateAddress() (string, error) {
+func (p *pollProvider) CreateAddress(context.Context) (string, error) {
 	return "", nil
 }
 
@@ -739,7 +741,7 @@ func (p *contextObservedProvider) Chain() Chain {
 	return "test"
 }
 
-func (p *contextObservedProvider) CreateAddress() (string, error) {
+func (p *contextObservedProvider) CreateAddress(context.Context) (string, error) {
 	return "test", nil
 }
 

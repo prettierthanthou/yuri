@@ -2,6 +2,7 @@ package yuri
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -43,9 +44,10 @@ type JsonRpcRequest struct {
 	// Must be exactly 2.0
 	JsonRPC string `json:"jsonrpc"`
 	Method  string `json:"method"`
-	// NOTE: while params *can* be an array in the official
-	// specification, we stick to objects here for clarity.
-	Params map[string]any `json:"params"`
+	// NOTE: previously we only supported maps/actual objects,
+	// but uhhh.. nope! fuck you. Bitcoin forced my hand
+	// because they dont accept named args.
+	Params any `json:"params,omitempty"`
 	// if ID is omitted this request is a Notification
 	Id string `json:"id,omitempty"`
 }
@@ -81,20 +83,24 @@ type jsonRpcError struct {
 }
 
 func RPCDo(
+	ctx context.Context,
 	client JsonRpcClient,
 	req JsonRpcRequest,
 	out any,
 ) error {
-	resp, err := client.Do(req)
+	resp, err := client.Do(ctx, req)
 	if err != nil {
 		return err
 	}
 
-	return json.Unmarshal(resp.Result, out)
+	dec := json.NewDecoder(bytes.NewReader(resp.Result))
+	dec.UseNumber()
+
+	return dec.Decode(out)
 }
 
 // You generally want to use RPCDo instead for an easier life.
-func (c JsonRpcClient) Do(request JsonRpcRequest) (JsonRpcResponse, error) {
+func (c JsonRpcClient) Do(ctx context.Context, request JsonRpcRequest) (JsonRpcResponse, error) {
 	rid := request.Id
 	if rid == "" {
 		rid = strconv.FormatInt(int64(rand.Int()), 10)
@@ -110,7 +116,7 @@ func (c JsonRpcClient) Do(request JsonRpcRequest) (JsonRpcResponse, error) {
 		return JsonRpcResponse{}, err
 	}
 
-	req, err := http.NewRequest("POST", c.conf.Host, bytes.NewBuffer(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", c.conf.Host, bytes.NewBuffer(body))
 	if err != nil {
 		return JsonRpcResponse{}, err
 	}

@@ -17,7 +17,7 @@ type CryptoProvider interface {
 	// CreateAddress creates a new subaddress/derived address from the root address
 	// provided at init time. Each provider should handle if they want to manually
 	// derive it, or request it from something like a JSON-RPC server.
-	CreateAddress() (string, error)
+	CreateAddress(context.Context) (string, error)
 
 	// Decimals gets the amount of decimals for the Native currency of this provider
 	Decimals() int64

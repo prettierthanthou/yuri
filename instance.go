@@ -225,7 +225,7 @@ func (i *Instance) NewInvoice(ctx context.Context, invoiceCreate InvoiceCreate) 
 		cryptoOwed.Add(cryptoOwed, big.NewInt(1))
 	}
 
-	addr, err := chain.CreateAddress()
+	addr, err := chain.CreateAddress(ctx)
 	if err != nil {
 		return Invoice{}, err
 	}

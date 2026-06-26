@@ -53,7 +53,7 @@ func (m monero) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, error)
 		}
 
 		var resp getAddrIndexResp
-		err := RPCDo(m.jsonRpc, JsonRpcRequest{
+		err := RPCDo(ctx, m.jsonRpc, JsonRpcRequest{
 			Method: "get_address_index",
 			Params: map[string]any{
 				"address": invoice.Address,
@@ -88,7 +88,7 @@ func (m monero) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, error)
 		}
 
 		var balanceResult getBalanceResult
-		err := RPCDo(m.jsonRpc, JsonRpcRequest{
+		err := RPCDo(ctx, m.jsonRpc, JsonRpcRequest{
 			Method: "get_balance",
 			Params: map[string]any{
 				"account_index":   major,
@@ -120,13 +120,13 @@ func (m monero) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, error)
 }
 
 // CreateAddress implements [CryptoProvider].
-func (m monero) CreateAddress() (string, error) {
+func (m monero) CreateAddress(ctx context.Context) (string, error) {
 	type createAddressResp struct {
 		Address string `json:"address"`
 	}
 
 	var resp createAddressResp
-	err := RPCDo(m.jsonRpc, JsonRpcRequest{
+	err := RPCDo(ctx, m.jsonRpc, JsonRpcRequest{
 		Method: "create_address",
 		Params: map[string]any{
 			"account_index": 0,

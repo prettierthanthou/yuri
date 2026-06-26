@@ -1,6 +1,7 @@
 package yuri
 
 import (
+	"context"
 	"math/big"
 	"os"
 	"path"
@@ -85,7 +86,7 @@ func moneroHelperCreateFullEnv(t *testing.T) (cModerod *yuritest.Container, cWal
 		})
 
 		walletJsonRpc = NewJsonRpcClient(JsonRpcClientConfig{Host: cWalletd.HTTP() + "/json_rpc"})
-		_, err := walletJsonRpc.Do(JsonRpcRequest{
+		_, err := walletJsonRpc.Do(context.Background(), JsonRpcRequest{
 			Method: "create_wallet",
 			Params: map[string]any{
 				"filename": wallet,
@@ -97,7 +98,7 @@ func moneroHelperCreateFullEnv(t *testing.T) (cModerod *yuritest.Container, cWal
 			t.Fatalf("create_wallet err = %q", err)
 		}
 
-		_, err = walletJsonRpc.Do(JsonRpcRequest{
+		_, err = walletJsonRpc.Do(context.Background(), JsonRpcRequest{
 			Method: "open_wallet",
 			Params: map[string]any{
 				"filename": wallet,
@@ -133,7 +134,7 @@ func TestMoneroCreateAddress(t *testing.T) {
 	_, _, _, walletJsonRpc, _, _ := moneroHelperCreateFullEnv(t)
 	moneroProvider := NewMonero(walletJsonRpc.conf)
 
-	addr, err := moneroProvider.CreateAddress()
+	addr, err := moneroProvider.CreateAddress(context.Background())
 	if err != nil {
 		t.Fatalf("CreateAddress err = %q", err)
 	}
@@ -146,7 +147,7 @@ func TestMoneroCreateAddress(t *testing.T) {
 	}
 
 	var resp getAddrIndexResp
-	err = RPCDo(walletJsonRpc, JsonRpcRequest{
+	err = RPCDo(context.Background(), walletJsonRpc, JsonRpcRequest{
 		Method: "get_address_index",
 		Params: map[string]any{
 			"address": addr,
@@ -160,7 +161,7 @@ func TestMoneroCreateAddress(t *testing.T) {
 func moneroGenerateBlocks(t *testing.T, daemonRpc JsonRpcClient, addr string, blocks uint64) {
 	t.Helper()
 
-	_, err := daemonRpc.Do(JsonRpcRequest{
+	_, err := daemonRpc.Do(context.Background(), JsonRpcRequest{
 		Method: "generateblocks",
 		Params: map[string]any{
 			"amount_of_blocks": blocks,
@@ -188,7 +189,7 @@ func TestPollMonero(t *testing.T) {
 	}
 
 	var getCustomerAddressResp getAddress
-	err := RPCDo(customerJsonRpc, JsonRpcRequest{
+	err := RPCDo(context.Background(), customerJsonRpc, JsonRpcRequest{
 		Method: "get_address",
 		Params: map[string]any{
 			"account_index": 0,
@@ -204,7 +205,7 @@ func TestPollMonero(t *testing.T) {
 	t.Log("30 blocks:", time.Since(start))
 
 	monero := NewMonero(merchantJsonRpc.conf)
-	merchantAddr, err := monero.CreateAddress()
+	merchantAddr, err := monero.CreateAddress(context.Background())
 	if err != nil {
 		t.Fatalf("CreateAddress() = %q", err)
 	}
@@ -229,7 +230,7 @@ func TestPollMonero(t *testing.T) {
 	}
 
 	start = time.Now()
-	_, err = customerJsonRpc.Do(JsonRpcRequest{
+	_, err = customerJsonRpc.Do(context.Background(), JsonRpcRequest{
 		Method: "transfer",
 		Params: map[string]any{
 			"destinations": []map[string]any{
@@ -241,7 +242,7 @@ func TestPollMonero(t *testing.T) {
 		},
 	})
 
-	customerJsonRpc.Do(JsonRpcRequest{
+	customerJsonRpc.Do(context.Background(), JsonRpcRequest{
 		Method: "refresh",
 	})
 	t.Log("transfer + refresh:", time.Since(start))
@@ -255,7 +256,7 @@ func TestPollMonero(t *testing.T) {
 	t.Log("1 block:", time.Since(start))
 
 	start = time.Now()
-	merchantJsonRpc.Do(JsonRpcRequest{
+	merchantJsonRpc.Do(context.Background(), JsonRpcRequest{
 		Method: "refresh",
 	})
 	t.Log("merchantJsonRpc refresh:", time.Since(start))
@@ -274,7 +275,7 @@ func TestPollMonero(t *testing.T) {
 	t.Log("1 block:", time.Since(start))
 
 	start = time.Now()
-	merchantJsonRpc.Do(JsonRpcRequest{
+	merchantJsonRpc.Do(context.Background(), JsonRpcRequest{
 		Method: "refresh",
 	})
 	t.Log("merchantJsonRpc refresh:", time.Since(start))
