@@ -16,6 +16,8 @@ type JsonRpcClientConfig struct {
 	Username string
 	Password string
 
+	NonB64BasicAuth bool
+
 	// override the default http client
 	Client *http.Client
 }
@@ -127,7 +129,12 @@ func (c JsonRpcClient) Do(ctx context.Context, request JsonRpcRequest) (JsonRpcR
 		// the username:password which... is RETARDED.
 		// this took 10 minutes to determine why monero_test.go was failing to communicate
 		// to RPC when auth was enabled.
-		req.Header.Set("Authorization", fmt.Sprintf("%s:%s", c.conf.Username, c.conf.Password))
+
+		if c.conf.NonB64BasicAuth {
+			req.Header.Set("Authorization", fmt.Sprintf("%s:%s", c.conf.Username, c.conf.Password))
+		} else {
+			req.SetBasicAuth(c.conf.Username, c.conf.Password)
+		}
 	}
 
 	resp, err := c.httpClient.Do(req)

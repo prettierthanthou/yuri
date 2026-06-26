@@ -56,7 +56,8 @@ func moneroHelperCreateFullEnv(t *testing.T) (cModerod *yuritest.Container, cWal
 	})
 
 	daemonRPC = NewJsonRpcClient(JsonRpcClientConfig{
-		Host: cModerod.HTTP() + "/json_rpc",
+		Host:            cModerod.HTTP() + "/json_rpc",
+		NonB64BasicAuth: true,
 	})
 
 	makeAndOpenWallet := func(wallet string) (*yuritest.Container, JsonRpcClient) {
@@ -85,7 +86,7 @@ func moneroHelperCreateFullEnv(t *testing.T) (cModerod *yuritest.Container, cWal
 			Wait: wait.ForListeningPort("28083/tcp"),
 		})
 
-		walletJsonRpc = NewJsonRpcClient(JsonRpcClientConfig{Host: cWalletd.HTTP() + "/json_rpc"})
+		walletJsonRpc = NewJsonRpcClient(JsonRpcClientConfig{Host: cWalletd.HTTP() + "/json_rpc", NonB64BasicAuth: true})
 		_, err := walletJsonRpc.Do(context.Background(), JsonRpcRequest{
 			Method: "create_wallet",
 			Params: map[string]any{

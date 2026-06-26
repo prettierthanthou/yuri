@@ -16,7 +16,13 @@ const Monero Chain = "monero"
 //
 // This base implementation always uses account index 0 (zero)
 func NewMonero(rpcConf JsonRpcClientConfig) monero {
-	return monero{jsonRpc: NewJsonRpcClient(rpcConf)}
+	return monero{jsonRpc: NewJsonRpcClient(JsonRpcClientConfig{
+		Host:            rpcConf.Host,
+		Username:        rpcConf.Username,
+		Password:        rpcConf.Password,
+		Client:          rpcConf.Client,
+		NonB64BasicAuth: true,
+	})}
 }
 
 type monero struct {
