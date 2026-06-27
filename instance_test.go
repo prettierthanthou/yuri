@@ -320,12 +320,69 @@ func TestInstanceNewInvoiceWithMetadata(t *testing.T) {
 		t.Fatalf("Metadata shouldn't be nil")
 	}
 
-	if val, ok := inv.Metadata["id"]; !ok {
-		if val != "123456" {
-			t.Fatalf("Metadata[id] = %s expected 123456", val)
-		} else {
-			t.Fatalf("Metadata[id] = nil expected 124356")
-		}
+	val, ok := inv.Metadata["id"]
+	if !ok {
+		t.Fatalf("Metadata[id] missing")
+	}
+
+	if val != "123456" {
+		t.Fatalf("Metadata[id] = %v expected 123456", val)
+	}
+}
+
+type recordingStorage struct {
+	newInvoiceCalled bool
+	newInvoice       Invoice
+}
+
+func (r *recordingStorage) NewInvoice(_ context.Context, invoice Invoice) error {
+	r.newInvoiceCalled = true
+	r.newInvoice = invoice
+	return nil
+}
+
+func (r *recordingStorage) GetActiveInvoices(context.Context, Chain) ([]Invoice, error) {
+	return nil, nil
+}
+
+func (r *recordingStorage) UpdateInvoices(context.Context, []Invoice) error {
+	return nil
+}
+
+func TestInstanceNewInvoicePersistsToStorage(t *testing.T) {
+	storage := &recordingStorage{}
+
+	instance, err := New(Options{
+		PollEvery: 5 * time.Second,
+		Storage:   storage,
+		Pricing:   []PriceProvider{testingFixedPriceProvider{price: 100}},
+		Chains:    []CryptoProvider{&testingFakeCryptoProvider{}},
+	})
+	if err != nil {
+		t.Fatalf("New() error = %q wanted nil", err)
+	}
+
+	inv, err := instance.NewInvoice(t.Context(), InvoiceCreate{
+		Chain:      Chain("test"),
+		AmountFiat: USD.Of(3.50),
+		Metadata: map[string]any{
+			"id": "abc123",
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewInvoice() error = %q wanted nil", err)
+	}
+
+	if !storage.newInvoiceCalled {
+		t.Fatal("Storage.NewInvoice was not called")
+	}
+
+	if storage.newInvoice.Address != inv.Address {
+		t.Fatalf("stored Address = %s expected %s", storage.newInvoice.Address, inv.Address)
+	}
+
+	if storage.newInvoice.Metadata["id"] != "abc123" {
+		t.Fatalf("stored Metadata[id] = %v expected abc123", storage.newInvoice.Metadata["id"])
 	}
 }
 
@@ -853,6 +910,104 @@ func TestInstanceRunStopsOnContextCancel(t *testing.T) {
 	select {
 	case <-done:
 		// Run exited.
+	case <-time.After(time.Second):
+		t.Fatal("Run() did not exit after cancellation")
+	}
+}
+
+type cancelAwareStorage struct {
+	getCalled    bool
+	updateCalled bool
+	active       []Invoice
+}
+
+func (s *cancelAwareStorage) NewInvoice(context.Context, Invoice) error {
+	return nil
+}
+
+func (s *cancelAwareStorage) GetActiveInvoices(_ context.Context, _ Chain) ([]Invoice, error) {
+	s.getCalled = true
+	return s.active, nil
+}
+
+func (s *cancelAwareStorage) UpdateInvoices(_ context.Context, _ []Invoice) error {
+	s.updateCalled = true
+	return nil
+}
+
+type cancelAwareProvider struct {
+	called chan struct{}
+	done   chan struct{}
+}
+
+func (p *cancelAwareProvider) Poll(ctx context.Context, _ []Invoice) ([]Invoice, error) {
+	close(p.called)
+	<-ctx.Done()
+	close(p.done)
+	return nil, ctx.Err()
+}
+
+func (p *cancelAwareProvider) Chain() Chain {
+	return Chain("test")
+}
+
+func (p *cancelAwareProvider) CreateAddress(context.Context) (string, error) {
+	return "test", nil
+}
+
+func (p *cancelAwareProvider) Decimals() int64 {
+	return 12
+}
+
+func TestInstanceRunUsesMaxPollDuration(t *testing.T) {
+	storage := &cancelAwareStorage{
+		active: []Invoice{{Address: "abc"}},
+	}
+	provider := &cancelAwareProvider{
+		called: make(chan struct{}),
+		done:   make(chan struct{}),
+	}
+
+	instance, err := New(Options{
+		PollEvery:       time.Hour,
+		MaxPollDuration: 20 * time.Millisecond,
+		Storage:         storage,
+		Pricing: []PriceProvider{
+			testingFixedPriceProvider{price: 100},
+		},
+		Chains: []CryptoProvider{
+			provider,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		instance.Run(ctx)
+	}()
+
+	select {
+	case <-provider.called:
+	case <-time.After(time.Second):
+		t.Fatal("Poll() was not called")
+	}
+
+	select {
+	case <-provider.done:
+	case <-time.After(time.Second):
+		t.Fatal("Poll() context was not canceled by MaxPollDuration")
+	}
+
+	cancel()
+
+	select {
+	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("Run() did not exit after cancellation")
 	}
