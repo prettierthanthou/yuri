@@ -29,11 +29,16 @@ type Options struct {
 	MaxPollDuration time.Duration
 }
 
+// Instance represents a Yuri invoice instance, which is
+// used to manage [CryptoProvider]s. Instance manages
+// creation of invoices, alongside emitting event updates
+// to you, the end user, using [Hooks]
 type Instance struct {
 	opts   Options
 	chains map[Chain]CryptoProvider
 }
 
+// New creates a new [Instance] and validates the provided [Options]
 func New(options Options) (*Instance, error) {
 	if options.PollEvery <= 0 {
 		options.PollEvery = 15 * time.Second
@@ -181,6 +186,8 @@ func (i *Instance) avgPrice(currency Currency, chain string, token Token) (int64
 
 var ten = big.NewInt(10)
 
+// NewInvoice creates a new invoice with the [Instance] using the respective
+// [CryptoProvider] and [PriceProvider]
 func (i *Instance) NewInvoice(ctx context.Context, invoiceCreate InvoiceCreate) (Invoice, error) {
 	chain, ok := i.chains[invoiceCreate.Chain]
 	if !ok {
