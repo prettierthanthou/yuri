@@ -9,14 +9,14 @@ import (
 
 const Ethereum Chain = "ethereum"
 
-// EthereumUSDT is USD(Tether) on Eth
+// EthereumUSDT is USD(Tether) on Eth(eth) not Eth(base)
 var EthereumUSDT Token = Token{
 	Symbol:   "USDT",
 	Contract: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
 	Decimals: 6,
 }
 
-// EthereumUSDC is USD(Circle) on Eth
+// EthereumUSDC is USD(Circle) on Eth(eth) not Eth(base)
 var EthereumUSDC Token = Token{
 	Symbol:   "USDC",
 	Contract: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
