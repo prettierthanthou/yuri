@@ -171,6 +171,55 @@ func TestNewDuplicateChains(t *testing.T) {
 	}
 }
 
+func TestInstanceNewInvoiceWithToken(t *testing.T) {
+	storage := &InMemoryStorage{}
+
+	instance, err := New(Options{
+		PollEvery: 5 * time.Second,
+		Storage:   storage,
+		Pricing:   []PriceProvider{testingFixedPriceProvider{price: 100}},
+		Chains:    []CryptoProvider{&testingFakeCryptoProvider{}},
+	})
+	if err != nil {
+		t.Fatalf("New() error = %q wanted nil", err)
+	}
+
+	inv, err := instance.NewInvoice(t.Context(), InvoiceCreate{
+		Chain:      Chain("test"),
+		AmountFiat: USD.Of(3.50),
+		Token: Token{
+			Symbol:   "FAKE",
+			Contract: "0xFAKEFAKEFAKEFAKE",
+			Decimals: 18,
+		},
+	})
+
+	if err != nil {
+		t.Fatalf("NewInvoice() error = %q wanted nil", err)
+	}
+
+	if inv.Address != "fake_test_addr" {
+		t.Fatalf("Address = %s expected fake_test_addr", inv.Address)
+	}
+
+	if inv.AmountPaid.BitLen() != 0 {
+		t.Fatalf("AmountPaid = %d expected 0", inv.AmountPaid.BitLen())
+	}
+
+	const treeFiddyInCents = 3500000000000000000
+	if inv.AmountOwed.Cmp(big.NewInt(3500000000000000000)) != 0 {
+		t.Fatalf("AmountOwed = %s expected %d", inv.AmountOwed.String(), treeFiddyInCents)
+	}
+
+	if inv.Pending {
+		t.Fatalf("Pending = true expected false")
+	}
+
+	if inv.Metadata != nil {
+		t.Fatalf("Metadata should be nil by default")
+	}
+}
+
 func TestInstanceNewInvoice(t *testing.T) {
 	storage := &InMemoryStorage{}
 
