@@ -159,7 +159,7 @@ func (i *Instance) poll(
 	return nil
 }
 
-func (i *Instance) avgPrice(currency Currency, chain string, token Token) (int64, error) {
+func (i *Instance) avgPrice(ctx context.Context, currency Currency, chain string, token Token) (int64, error) {
 	if len(i.opts.Pricing) == 0 {
 		return 0, errors.New("no price providers configured")
 	}
@@ -168,7 +168,12 @@ func (i *Instance) avgPrice(currency Currency, chain string, token Token) (int64
 	var count int64
 
 	for _, p := range i.opts.Pricing {
-		price, err := p.Get(currency, chain, token)
+		select {
+		case <-ctx.Done():
+			return 0, ctx.Err()
+		default:
+		}
+		price, err := p.Get(ctx, currency, chain, token)
 		if err != nil {
 			continue
 		}
@@ -195,7 +200,7 @@ func (i *Instance) NewInvoice(ctx context.Context, invoiceCreate InvoiceCreate) 
 	}
 
 	// TODO: coordinate with pricing providers
-	avgPrice, err := i.avgPrice(invoiceCreate.AmountFiat.Currency, string(invoiceCreate.Chain), invoiceCreate.Token)
+	avgPrice, err := i.avgPrice(ctx, invoiceCreate.AmountFiat.Currency, string(invoiceCreate.Chain), invoiceCreate.Token)
 	if err != nil {
 		return Invoice{}, err
 	}

@@ -27,6 +27,7 @@ type testingFixedPriceProvider struct {
 }
 
 func (f testingFixedPriceProvider) Get(
+	_ context.Context,
 	_ Currency,
 	_ string,
 	_ Token,
@@ -423,6 +424,7 @@ func TestAvgPrice(t *testing.T) {
 	}
 
 	price, err := instance.avgPrice(
+		context.Background(),
 		USD,
 		"test",
 		Token{},
@@ -453,6 +455,7 @@ func TestAvgPriceIgnoresFailedProviders(t *testing.T) {
 	}
 
 	price, err := instance.avgPrice(
+		context.Background(),
 		USD,
 		"test",
 		Token{},
@@ -482,6 +485,7 @@ func TestAvgPriceAllProvidersFail(t *testing.T) {
 	}
 
 	_, err = instance.avgPrice(
+		context.Background(),
 		USD,
 		"test",
 		Token{},

@@ -1,6 +1,7 @@
 package yuri
 
 import (
+	"context"
 	"errors"
 	"math"
 )
@@ -22,7 +23,7 @@ type PriceProvider interface {
 	//
 	// If the provider does not support the requested chain/token
 	// then ChainNotSupportedErr should be thrown.
-	Get(currency Currency, chain string, token Token) (fiatMinorUnits int64, err error)
+	Get(ctx context.Context, currency Currency, chain string, token Token) (fiatMinorUnits int64, err error)
 }
 
 var (
