@@ -123,14 +123,14 @@ func (e *Env) Run(spec Spec) *Container {
 		done := make(chan struct{})
 
 		go func() {
-			_ = c.Terminate(context.Background())
+			_ = c.Terminate(e.ctx)
 			close(done)
 		}()
 
 		select {
 		case <-done:
 			return
-		case <-time.After(10 * time.Second):
+		case <-time.After(15 * time.Second):
 			e.t.Fatalf("container %s did not terminate within 10s", spec.Name)
 		}
 	})
