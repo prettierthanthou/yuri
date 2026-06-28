@@ -35,6 +35,7 @@ func assetSymbol(chain string, token Token) string {
 	if token != (Token{}) && token.Symbol != "" {
 		return strings.ToUpper(token.Symbol)
 	}
+
 	return strings.ToUpper(chain)
 }
 
@@ -42,6 +43,7 @@ func pairMatchesMarket(pair, base, quote string) bool {
 	pair = strings.ToUpper(strings.ReplaceAll(pair, "_", ""))
 	base = strings.ToUpper(base)
 	quote = strings.ToUpper(quote)
+
 	return strings.HasPrefix(pair, base) && strings.HasSuffix(pair, quote)
 }
 
@@ -49,15 +51,18 @@ func httpClient(c *http.Client) *http.Client {
 	if c != nil {
 		return c
 	}
+
 	return http.DefaultClient
 }
 
 func parseBody(resp *http.Response, out any) error {
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
+
 	if err != nil {
 		return err
 	}
+
 	return json.Unmarshal(body, out)
 }
 
@@ -69,17 +74,22 @@ func getJSON(ctx context.Context, client *http.Client, raw string, out any) erro
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, raw, nil)
 	if err != nil {
 		return err
+
 	}
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
+
 	if resp.StatusCode == http.StatusNotFound {
 		return ChainNotSupportedErr
 	}
+
 	if resp.StatusCode == http.StatusTooManyRequests {
 		return errors.New("pricing provider rate limited")
 	}
+
 	return parseBody(resp, out)
 }
 
@@ -113,91 +123,118 @@ func pickRate(m map[string]float64, keys ...string) (float64, bool) {
 func NewCoinGeckoPriceProvider(client *http.Client) PriceProvider {
 	return coinGeckoProvider{client: client}
 }
+
 func NewBtcTurkPriceProvider(client *http.Client) PriceProvider {
 	return marketProvider{client: client, url: "https://api.btcturk.com/api/v2/ticker"}
 }
+
 func NewBareBitcoinPriceProvider(client *http.Client) PriceProvider {
 	return marketProvider{client: client, url: "https://api.bb.no/v1/price/nok"}
 }
+
 func NewBitbankPriceProvider(client *http.Client) PriceProvider {
 	return marketProvider{client: client, url: "https://public.bitbank.cc/tickers"}
 }
+
 func NewBitcoinKenyaPriceProvider(client *http.Client) PriceProvider {
 	return marketProvider{client: client, url: "https://trex.bitcoin.co.ke/btcpay/rates"}
 }
+
 func NewBitflyerPriceProvider(client *http.Client) PriceProvider {
 	return marketProvider{client: client, url: "https://api.bitflyer.jp/v1/ticker"}
 }
+
 func NewBitmyntPriceProvider(client *http.Client) PriceProvider {
 	return marketProvider{client: client, url: "https://ny.bitmynt.no/data/rates.json"}
 }
+
 func NewBitnobPriceProvider(client *http.Client) PriceProvider {
 	return marketProvider{client: client, url: "https://api.bitnob.co/api/v1/rates/bitcoin/price"}
 }
+
 func NewBitpayPriceProvider(client *http.Client) PriceProvider {
 	return marketProvider{client: client, url: "https://bitpay.com/rates"}
 }
+
 func NewBudaPriceProvider(client *http.Client) PriceProvider {
 	return marketProvider{client: client, url: "https://www.buda.com/api/v2/markets/btc-clp/ticker"}
 }
+
 func NewByllsPriceProvider(client *http.Client) PriceProvider {
 	return marketProvider{client: client, url: "https://bylls.com/api/price?from_currency=BTC&to_currency=CAD"}
 }
+
 func NewCoinDCXPriceProvider(client *http.Client) PriceProvider {
 	return marketProvider{client: client, url: "https://api.coindcx.com/exchange/ticker"}
 }
+
 func NewCoinmatePriceProvider(client *http.Client) PriceProvider {
 	return marketProvider{client: client, url: "https://coinmate.io/api/tickerAll"}
 }
+
 func NewCryptoMarketPriceProvider(client *http.Client) PriceProvider {
 	return marketProvider{client: client, url: "https://api.exchange.cryptomkt.com/api/3/public/ticker/"}
 }
+
 func NewDesiboardPriceProvider(client *http.Client) PriceProvider {
 	return marketProvider{client: client, url: "https://desiboard.thevikas.com/api/price"}
 }
+
 func NewFreeCurrencyRatesPriceProvider(client *http.Client) PriceProvider {
 	return marketProvider{client: client, url: "https://currency-api.pages.dev/v1/currencies/btc.min.json"}
 }
+
 func NewHitBTCPriceProvider(client *http.Client) PriceProvider {
 	return marketProvider{client: client, url: "https://api.hitbtc.com/api/2/public/ticker"}
 }
+
 func NewKrakenPriceProvider(client *http.Client) PriceProvider {
 	return marketProvider{client: client, url: "https://api.kraken.com/0/public/Ticker"}
 }
+
 func NewLunoPriceProvider(client *http.Client) PriceProvider {
 	return marketProvider{client: client, url: "https://api.luno.com/api/1/tickers"}
 }
+
 func NewRipioPriceProvider(client *http.Client) PriceProvider {
 	return marketProvider{client: client, url: "https://api.ripiotrade.co/v4/public/tickers"}
 }
+
 func NewYadioPriceProvider(client *http.Client) PriceProvider {
 	return marketProvider{client: client, url: "https://api.yadio.io/exrates/BTC"}
 }
+
 func NewNullPriceProvider() PriceProvider { return nullProvider{} }
 
 func (p coinGeckoProvider) Get(ctx context.Context, currency Currency, chain string, token Token) (int64, error) {
 	if !wantFiat(currency) {
 		return -1, FiatCurrencyNotSupportedErr
 	}
+
 	if token != (Token{}) {
 		return geckoToken(ctx, httpClient(p.client), currency, chain, token)
 	}
+
 	raw := buildURL("https://api.coingecko.com", "/api/v3/simple/price", map[string]string{
 		"ids":           strings.ToLower(chain),
 		"vs_currencies": strings.ToLower(currency.Code),
 	})
+
 	var parsed map[string]map[string]float64
 	if err := getJSON(ctx, httpClient(p.client), raw, &parsed); err != nil {
 		return -1, err
 	}
+
 	row, ok := parsed[strings.ToLower(chain)]
 	if !ok {
 		return -1, ChainNotSupportedErr
 	}
+
 	rate, ok := pickRate(row, currency.Code)
 	if !ok {
 		return -1, fmt.Errorf("missing price from coingecko response")
 	}
+
 	return minor(currency, rate), nil
 }
 
@@ -206,6 +243,7 @@ func geckoToken(ctx context.Context, client *http.Client, currency Currency, cha
 		"contract_addresses": token.Contract,
 		"vs_currencies":      strings.ToLower(currency.Code),
 	})
+
 	var parsed map[string]map[string]float64
 	if err := getJSON(ctx, client, raw, &parsed); err != nil {
 		return -1, err
@@ -336,6 +374,7 @@ func (p marketProvider) Get(ctx context.Context, currency Currency, chain string
 				if market == "" {
 					continue
 				}
+
 				bid, bok := asFloat(row["bid"])
 				ask, aok := asFloat(row["ask"])
 				if bok && aok && pairMatchesMarket(market, base, currency.Code) {
@@ -366,6 +405,7 @@ func (p marketProvider) Get(ctx context.Context, currency Currency, chain string
 						return numberToMinor(currency, (bid+ask)/2)
 					}
 				}
+
 				if last, ok := asFloat(row["last"]); ok {
 					return numberToMinor(currency, last)
 				}
@@ -442,6 +482,7 @@ func valueFromAny(bid any, ask any, currency Currency) (int64, error) {
 	if !bok || !aok {
 		return -1, ChainNotSupportedErr
 	}
+
 	return numberToMinor(currency, (b+a)/2)
 }
 
@@ -455,6 +496,7 @@ func pickAnyNumber(m map[string]any, key string) (any, bool) {
 			return v, true
 		}
 	}
+
 	return nil, false
 }
 
@@ -478,6 +520,7 @@ func asFloat(v any) (float64, bool) {
 		if len(t) == 0 {
 			return 0, false
 		}
+
 		return asFloat(t[0])
 	default:
 		return 0, false
@@ -489,5 +532,6 @@ func numberToMinor(currency Currency, v any) (int64, error) {
 	if !ok {
 		return -1, ChainNotSupportedErr
 	}
+
 	return currency.ToMinor(f), nil
 }
