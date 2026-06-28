@@ -52,3 +52,7 @@ func (c Currency) Of(amount float64) fiat {
 		Minor:    int64(amount * float64(scale)),
 	}
 }
+
+func (c Currency) ToMinor(amount float64) int64 {
+	return int64(math.Round(amount * float64(math.Pow10(c.Decimals))))
+}
