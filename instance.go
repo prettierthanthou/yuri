@@ -2,6 +2,8 @@
 //
 // we handle creating invoices, polling known cryptocurrencies (via [CryptoProvider])
 // users are expected to bring their own [Storage] implementation
+//
+// This project is licensed under the GNU AGPLv3 accessible in the License file at the root of the package.
 package yuri
 
 import (
@@ -16,6 +18,7 @@ import (
 // Hooks are lifecycle state to that you don't need to handle
 // lifecycle updates in Storage handlers.
 type Hooks struct {
+	// If [Storage.UpdateInvoices] fails this method is not called for the Invoice(s)
 	OnInvoiceUpdated func(context.Context, Invoice) error
 	OnError          func(error)
 }
