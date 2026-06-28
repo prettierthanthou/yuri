@@ -1,3 +1,7 @@
+// yuri is a relatively self contained cryptocurrency invoice library.
+//
+// we handle creating invoices, polling known cryptocurrencies (via [CryptoProvider])
+// users are expected to bring their own [Storage] implementation
 package yuri
 
 import (
