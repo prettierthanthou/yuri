@@ -7,12 +7,94 @@ simple, sweet, and quick library for handling cryptocurrencies in go
 [references](#references)
 
 
-
 ### examples
-TODO: im so llaaalalazzyzyyy
+Accessible on pkg.go.dev alongside in [example_instance_test](./example_instance_test.go)
+```go
+// Copied from example_instance_test
+package main
+
+import (
+    "codeberg.org/lewdest/yuri"
+)
+
+func main() {
+    ctx := context.Background()
+	instance, err := yuri.New(yuri.Options{
+		Hooks: yuri.Hooks{
+			OnError: func(err error) {
+				// if an error happened during Polling/Run itll be given here
+				// instead of nuking ur app. kill the run Context if you want.
+				// do you.
+			},
+			OnInvoiceUpdated: func(ctx context.Context, i yuri.Invoice) error {
+				// an invoice updated
+
+				if i.Paid() {
+					// they paid, its confirmed. do thing.
+					return nil
+				}
+
+				return nil
+			},
+		},
+		Chains: []yuri.CryptoProvider{
+			yuri.NewMonero(yuri.JsonRpcClientConfig{
+				Host:     "",
+				Username: "",
+				Password: "",
+				// Client: override or uses http.DefaultClient,
+			}),
+		},
+
+		Pricing: []yuri.PriceProvider{
+            // these are the same, by default a CachedPriceProvider lives in memory,
+			// if you wish to coordinate/cache the pricing between restarts you can wrap
+			// [PricingProvider] with Redis etc.
+			yuri.NewCachedPriceProvider(yuri.NewCoinGeckoPriceProvider(nil)),
+			yuri.NewCachedPriceProviderWithTTL(yuri.NewCoinGeckoPriceProvider(nil), 3*time.Minute),
+            yuri.NewCryptoMarketPriceProvider(nil),
+            // NOTE: there are several other predefined pricing providers, you need atleast 1,
+            // but ideally you should have 3+
+        },
+		Storage: &yuri.InMemoryStorage{},
+
+		PollEvery:       15 * time.Second,
+		MaxPollDuration: 15 * time.Second,
+	})
+
+	if err != nil {
+		// you fucked up an option
+		return
+	}
+
+	go instance.Run(ctx)
+
+	inv, err := instance.NewInvoice(ctx, yuri.InvoiceCreate{
+		Chain:      yuri.Monero,
+		AmountFiat: yuri.USD.Of(10.50),
+	})
+	if err != nil {
+		// do something
+		return
+	}
+
+	log.Printf("addr = %s owed = %s", inv.Address, inv.AmountOwed.String())
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	<-c
+}
+```
 
 ### references
 
 - [monero daemon docker](https://hub.docker.com/r/melotools/monero)
 - [bitcoin daemon docker](https://hub.docker.com/r/bitcoin/bitcoin)
+-> https://bitcoincore.org/en/doc/31.0.0/rpc/wallet/abandontransaction/
 - [eth setup maybe](https://ethereum.stackexchange.com/questions/125/how-do-i-set-up-a-private-ethereum-network)
+
+- [solana agave docker](https://github.com/dysnix/docker-agave)
+
+not really regtest possible:
+- [ton tcp62](https://github.com/ton-blockchain/TEPs/blob/master/text/0062-nft-standard.md)
+- [ton jetton](https://github.com/ton-blockchain/TEPs/blob/master/text/0074-jettons-standard.md)
