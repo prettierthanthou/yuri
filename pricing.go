@@ -11,9 +11,13 @@ var (
 	ChainNotSupportedErr        = errors.New("requested chain/token is not supported by the pricing provider")
 )
 
+// PriceProvider respresents some place where we can fetch current prices
+// for a cryptocurrency. A PriceProvider MUST ALWAYS be safe to call concurrently.
 type PriceProvider interface {
 	// Get fetches the price of a cryptocurrency(/token) from a remote
 	// pricing provider, for example CoinGecko, in the requested currency.
+	//
+	// Get MUST ALWAYS be safe to call concurrently.
 	//
 	// The return value should be in the minor fiat unit, for example
 	// cents.
