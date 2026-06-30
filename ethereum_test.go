@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"codeberg.org/lewdest/yuri/yuritest"
+	"codeberg.org/lewdest/yuri/internal/yuritest"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
