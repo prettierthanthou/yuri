@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func ExampleInstance() {
+func Example() {
 	ctx := context.Background()
 	instance, err := New(Options{
 		Hooks: Hooks{
@@ -37,7 +37,13 @@ func ExampleInstance() {
 			}),
 		},
 
-		Pricing: []PriceProvider{},
+		Pricing: []PriceProvider{
+			// these are the same, by default a CachedPriceProvider lives in memory,
+			// if you wish to coordinate/cache the pricing between restarts you can wrap
+			// [PricingProvider] with Redis etc.
+			NewCachedPriceProvider(NewCoinGeckoPriceProvider(nil)),
+			NewCachedPriceProviderWithTTL(NewCoinGeckoPriceProvider(nil), 3*time.Minute),
+		},
 		Storage: &InMemoryStorage{},
 
 		PollEvery:       15 * time.Second,
@@ -65,25 +71,4 @@ func ExampleInstance() {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 	<-c
-}
-
-func ExamplecachedPriceProvider() {
-	_, err := New(Options{
-		Pricing: []PriceProvider{
-			// these are the same, by default a CachedPriceProvider lives in memory,
-			// if you wish to coordinate/cache the pricing between restarts you can wrap
-			// [PricingProvider] with Redis etc.
-			NewCachedPriceProvider(NewCoinGeckoPriceProvider(nil)),
-			NewCachedPriceProviderWithTTL(NewCoinGeckoPriceProvider(nil), 3*time.Minute),
-		},
-		Storage: &InMemoryStorage{},
-
-		PollEvery:       15 * time.Second,
-		MaxPollDuration: 15 * time.Second,
-	})
-
-	if err != nil {
-		// you fucked up an option
-		return
-	}
 }
