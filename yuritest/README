@@ -1,4 +1,0 @@
-these are explicitly used for implementing tests in a faster way,
-these are not public, but are exposed publicly in the single usecase
-of someone creating 3rd party libraries/crypto providers whom do not
-wish to push them upstream to us. ):
