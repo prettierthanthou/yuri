@@ -153,6 +153,11 @@ func (m monero) Chain() Chain {
 	return Monero
 }
 
+// PriceSymbol implements [PricingSymbolProvider].
+func (m monero) PriceSymbol() string {
+	return "XMR"
+}
+
 // Decimals implements [CryptoProvider].
 func (m monero) Decimals() int64 {
 	return 12

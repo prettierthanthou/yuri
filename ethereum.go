@@ -38,6 +38,11 @@ func (e ethereum) Chain() Chain {
 	return Ethereum
 }
 
+// PriceSymbol implements [PricingSymbolProvider].
+func (e ethereum) PriceSymbol() string {
+	return "ETH"
+}
+
 // CreateAddress implements [CryptoProvider].
 func (e ethereum) CreateAddress(ctx context.Context) (string, error) {
 	var resp string

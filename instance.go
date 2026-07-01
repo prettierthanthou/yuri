@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strings"
 	"sync"
 	"time"
 )
@@ -196,6 +197,17 @@ func (i *Instance) avgPrice(ctx context.Context, currency Currency, chain string
 	return sum / count, nil
 }
 
+func pricingSymbol(provider CryptoProvider) string {
+	symbol := strings.ToUpper(string(provider.Chain()))
+	if symbolProvider, ok := provider.(PricingSymbolProvider); ok {
+		if custom := strings.TrimSpace(symbolProvider.PriceSymbol()); custom != "" {
+			return custom
+		}
+	}
+
+	return symbol
+}
+
 var ten = big.NewInt(10)
 
 // NewInvoice creates a new invoice with the [Instance] using the respective
@@ -207,7 +219,7 @@ func (i *Instance) NewInvoice(ctx context.Context, invoiceCreate InvoiceCreate) 
 	}
 
 	// TODO: coordinate with pricing providers
-	avgPrice, err := i.avgPrice(ctx, invoiceCreate.AmountFiat.Currency, string(invoiceCreate.Chain), invoiceCreate.Token)
+	avgPrice, err := i.avgPrice(ctx, invoiceCreate.AmountFiat.Currency, pricingSymbol(chain), invoiceCreate.Token)
 	if err != nil {
 		return Invoice{}, err
 	}

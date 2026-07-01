@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"strings"
 )
 
 const Bitcoin Chain = "bitcoin"
@@ -36,6 +37,18 @@ type bitcoinLike struct {
 // Chain implements [CryptoProvider].
 func (b bitcoinLike) Chain() Chain {
 	return b.chain
+}
+
+// PriceSymbol implements [PricingSymbolProvider].
+func (b bitcoinLike) PriceSymbol() string {
+	switch b.chain {
+	case Bitcoin:
+		return "BTC"
+	case Litecoin:
+		return "LTC"
+	default:
+		return strings.ToUpper(string(b.chain))
+	}
 }
 
 // CreateAddress implements [CryptoProvider].

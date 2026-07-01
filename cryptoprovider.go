@@ -33,6 +33,13 @@ type CryptoProvider interface {
 	Poll(context.Context, []Invoice) ([]Invoice, error)
 }
 
+// PricingSymbolProvider can be implemented by CryptoProvider implementations
+// that need to expose a different market symbol than their Chain name.
+// This is optional and exists so pricing providers can avoid hardcoded symbol maps.
+type PricingSymbolProvider interface {
+	PriceSymbol() string
+}
+
 // Token represents a smart contract on a respective chain
 // for example, USDT erc20
 type Token struct {
