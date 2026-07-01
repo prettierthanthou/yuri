@@ -12,6 +12,7 @@ const Bitcoin Chain = "bitcoin"
 const Litecoin Chain = "litecoin"
 
 var _ CryptoProvider = bitcoinLike{}
+var _ PricingSymbolProvider = bitcoinLike{}
 
 func NewBitcoin(rpcConf JsonRpcClientConfig) bitcoinLike {
 	return bitcoinLike{

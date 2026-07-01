@@ -24,6 +24,7 @@ var EthereumUSDC Token = Token{
 }
 
 var _ CryptoProvider = ethereum{}
+var _ PricingSymbolProvider = ethereum{}
 
 func NewEthereum(rpcConf JsonRpcClientConfig) ethereum {
 	return ethereum{jsonRpc: NewJsonRpcClient(rpcConf)}

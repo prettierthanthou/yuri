@@ -6,6 +6,7 @@ import (
 )
 
 var _ CryptoProvider = monero{}
+var _ PricingSymbolProvider = monero{}
 
 const Monero Chain = "monero"
 
