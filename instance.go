@@ -122,11 +122,10 @@ func (i *Instance) runChain(
 
 	for {
 		derivedCtx, cancel := context.WithTimeout(ctx, i.opts.MaxPollDuration)
-		defer cancel()
-
 		if err := i.poll(derivedCtx, chain, provider); err != nil {
 			i.reportErr(err)
 		}
+		cancel()
 
 		select {
 		case <-ctx.Done():
