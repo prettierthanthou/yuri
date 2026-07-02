@@ -256,6 +256,75 @@ func TestEthereumParseHexBigInt(t *testing.T) {
 	}
 }
 
+func TestEthereumPollPendingBalance(t *testing.T) {
+	rpc, accounts := ethereumHelperCreateEnv(t)
+	provider := NewEthereum(JsonRpcClientConfig{
+		Host: rpc.conf.Host,
+	})
+	ctx := context.Background()
+	merchantAddr := accounts[0]
+	funderAddr := accounts[1]
+
+	// 20 wei confirmed
+	if _, err := rpc.Do(ctx, JsonRpcRequest{
+		Method: "anvil_setBalance",
+		Params: []any{merchantAddr, "0x14"},
+	}); err != nil {
+		t.Fatalf("anvil_setBalance: %v", err)
+	}
+
+	if _, err := rpc.Do(ctx, JsonRpcRequest{
+		Method: "anvil_setBalance",
+		Params: []any{funderAddr, "0xde0b6b3a7640000"},
+	}); err != nil {
+		t.Fatalf("anvil_setBalance(funder): %v", err)
+	}
+
+	if _, err := rpc.Do(ctx, JsonRpcRequest{
+		Method: "evm_setAutomine",
+		Params: []any{false},
+	}); err != nil {
+		t.Fatalf("evm_setAutomine(false): %v", err)
+	}
+
+	// pending payment to reach 25
+	if _, err := rpc.Do(ctx, JsonRpcRequest{
+		Method: "eth_sendTransaction",
+		Params: []any{
+			map[string]any{
+				"from":  funderAddr,
+				"to":    merchantAddr,
+				"value": "0x5",
+			},
+		},
+	}); err != nil {
+		t.Fatalf("eth_sendTransaction: %v", err)
+	}
+	invoice := Invoice{
+		Chain:      Ethereum,
+		Address:    merchantAddr,
+		AmountOwed: big.NewInt(25),
+		AmountPaid: big.NewInt(0),
+	}
+
+	got, err := provider.Poll(ctx, []Invoice{invoice})
+	if err != nil {
+		t.Fatalf("Poll: %v", err)
+	}
+
+	if got[0].AmountPaid.Cmp(big.NewInt(25)) != 0 {
+		t.Fatalf("AmountPaid = %v, want 25", got[0].AmountPaid)
+	}
+
+	if !got[0].Pending {
+		t.Fatal("expected invoice to be pending")
+	}
+
+	if got[0].Paid() {
+		t.Fatal("pending invoice must not be marked paid")
+	}
+}
+
 func bigInt(t *testing.T, v int64) *big.Int {
 	t.Helper()
 	return big.NewInt(v)

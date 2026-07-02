@@ -65,8 +65,11 @@ func (e ethereum) Decimals() int64 {
 // Poll implements [CryptoProvider].
 func (e ethereum) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, error) {
 	type balanceBalance struct {
-		total     *big.Int
-		confirmed *big.Int
+		// thank you jintana
+
+		pending *big.Int
+		// confirmed bal
+		latest *big.Int
 	}
 
 	balances := make(map[string]*balanceBalance, len(invoices))
@@ -86,8 +89,8 @@ func (e ethereum) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, erro
 			}
 
 			balances[inv.Address] = &balanceBalance{
-				total:     latest,
-				confirmed: pending,
+				pending: pending,
+				latest:  latest,
 			}
 			continue
 		}
@@ -99,8 +102,8 @@ func (e ethereum) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, erro
 
 		key := tokenBalanceKey(inv.Address, inv.Token)
 		balances[key] = &balanceBalance{
-			total:     latest,
-			confirmed: pending,
+			pending: pending,
+			latest:  latest,
 		}
 	}
 
@@ -120,11 +123,13 @@ func (e ethereum) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, erro
 
 		bal := balances[key]
 		if bal == nil {
-			bal = &balanceBalance{total: new(big.Int), confirmed: new(big.Int)}
+			bal = &balanceBalance{pending: new(big.Int), latest: new(big.Int)}
 		}
 
-		inv.AmountPaid = new(big.Int).Set(bal.total)
-		inv.Pending = inv.AmountPaid.Cmp(inv.AmountOwed) >= 0 && bal.confirmed.Cmp(inv.AmountOwed) < 0
+		inv.AmountPaid = new(big.Int).Set(bal.pending)
+		inv.Pending =
+			bal.latest.Cmp(inv.AmountOwed) < 0 &&
+				bal.pending.Cmp(inv.AmountOwed) >= 0
 		newInvoices = append(newInvoices, inv)
 	}
 
