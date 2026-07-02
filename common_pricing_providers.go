@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"slices"
@@ -72,8 +71,6 @@ func parseBody(resp *http.Response, out any) error {
 	if err != nil {
 		return err
 	}
-
-	log.Printf("req body: %+v", string(body))
 
 	return json.Unmarshal(body, out)
 }
