@@ -217,7 +217,6 @@ func (i *Instance) NewInvoice(ctx context.Context, invoiceCreate InvoiceCreate) 
 		return Invoice{}, fmt.Errorf("chain %s is not registered", invoiceCreate.Chain)
 	}
 
-	// TODO: coordinate with pricing providers
 	avgPrice, err := i.avgPrice(ctx, invoiceCreate.AmountFiat.Currency, pricingSymbol(chain), invoiceCreate.Token)
 	if err != nil {
 		return Invoice{}, err
