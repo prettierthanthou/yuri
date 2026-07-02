@@ -50,10 +50,9 @@ type fiat struct {
 // Of takes in the amount.
 // For example, yuri.USD.Of(10.50) would mean $10.50 USD
 func (c Currency) Of(amount float64) fiat {
-	scale := math.Pow10(c.Decimals)
 	return fiat{
 		Currency: c,
-		Minor:    int64(amount * float64(scale)),
+		Minor:    c.ToMinor(amount),
 	}
 }
 
