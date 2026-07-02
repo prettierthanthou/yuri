@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"codeberg.org/lewdest/yuri/internal/yuritest"
+	"codeberg.org/lewdest/yuri/yuritest"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
