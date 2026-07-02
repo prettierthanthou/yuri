@@ -147,7 +147,7 @@ func (i *InMemoryStorage) UpdateInvoices(_ context.Context, invoices []Invoice) 
 		}
 
 		if inv.Paid() {
-			i.activeInvoices[inv.Chain] = slices.Delete(i.activeInvoices[inv.Chain], idx, idx)
+			i.activeInvoices[inv.Chain] = slices.Delete(i.activeInvoices[inv.Chain], idx, idx+1)
 			return nil
 		}
 
