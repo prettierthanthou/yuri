@@ -8,6 +8,7 @@ import (
 )
 
 const Ethereum Chain = "ethereum"
+const BNB Chain = "bnb"
 
 // EthereumUSDT is USD(Tether) on Eth(eth) not Eth(base)
 var EthereumUSDT Token = Token{
@@ -23,29 +24,58 @@ var EthereumUSDC Token = Token{
 	Decimals: 6,
 }
 
-var _ CryptoProvider = ethereum{}
-var _ PricingSymbolProvider = ethereum{}
+var _ CryptoProvider = ethereumLike{}
+var _ PricingSymbolProvider = ethereumLike{}
 
-func NewEthereum(rpcConf JsonRpcClientConfig) ethereum {
-	return ethereum{jsonRpc: NewJsonRpcClient(rpcConf)}
+// NewEthereum constructs a new ethereumLike CryptoProvider preconfigured for the standard Eth chain.
+func NewEthereum(rpcConf JsonRpcClientConfig) ethereumLike {
+	return ethereumLike{
+		jsonRpc: NewJsonRpcClient(rpcConf),
+		chain:   Ethereum,
+		symbol:  "ETH",
+	}
 }
 
-type ethereum struct {
+// NewBNB constructs a new ethereumLike CryptoProvider preconfigured for the BNB chain.
+func NewBNB(rpcConf JsonRpcClientConfig) ethereumLike {
+	return ethereumLike{
+		jsonRpc: NewJsonRpcClient(rpcConf),
+		chain:   BNB,
+		symbol:  "BNB",
+	}
+}
+
+// NewEthereumLike constructs a new ethereumLike CryptoProvider for generic EVM compatible
+// chains. For example Eth(base), BNB, Eth(eth).
+//
+// Chain is the name of the chain, this must be unique.
+// Symbol is the pricing symbol, for example "ETH" for Eth(eth).
+func NewEthereumLike(chain, symbol string, rpcConf JsonRpcClientConfig) ethereumLike {
+	return ethereumLike{
+		jsonRpc: NewJsonRpcClient(rpcConf),
+		chain:   Chain(chain),
+		symbol:  symbol,
+	}
+}
+
+type ethereumLike struct {
 	jsonRpc JsonRpcClient
+	chain   Chain
+	symbol  string
 }
 
 // Chain implements [CryptoProvider].
-func (e ethereum) Chain() Chain {
-	return Ethereum
+func (e ethereumLike) Chain() Chain {
+	return e.chain
 }
 
 // PriceSymbol implements [PricingSymbolProvider].
-func (e ethereum) PriceSymbol() string {
-	return "ETH"
+func (e ethereumLike) PriceSymbol() string {
+	return e.symbol
 }
 
 // CreateAddress implements [CryptoProvider].
-func (e ethereum) CreateAddress(ctx context.Context) (string, error) {
+func (e ethereumLike) CreateAddress(ctx context.Context) (string, error) {
 	var resp string
 	if err := RPCDo(ctx, e.jsonRpc, JsonRpcRequest{
 		Method: "personal_newAccount",
@@ -58,12 +88,12 @@ func (e ethereum) CreateAddress(ctx context.Context) (string, error) {
 }
 
 // Decimals implements [CryptoProvider].
-func (e ethereum) Decimals() int64 {
+func (e ethereumLike) Decimals() int64 {
 	return 18
 }
 
 // Poll implements [CryptoProvider].
-func (e ethereum) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, error) {
+func (e ethereumLike) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, error) {
 	type balanceBalance struct {
 		// thank you jintana
 
@@ -140,7 +170,7 @@ func tokenBalanceKey(addr string, token Token) string {
 	return strings.ToLower(addr) + "|" + strings.ToLower(token.Contract)
 }
 
-func (e ethereum) nativeBalance(ctx context.Context, addr string) (*big.Int, *big.Int, error) {
+func (e ethereumLike) nativeBalance(ctx context.Context, addr string) (*big.Int, *big.Int, error) {
 	latest, err := e.rpcHexBalance(ctx, "eth_getBalance", addr, "latest")
 	if err != nil {
 		return nil, nil, err
@@ -154,7 +184,7 @@ func (e ethereum) nativeBalance(ctx context.Context, addr string) (*big.Int, *bi
 	return latest, pending, nil
 }
 
-func (e ethereum) erc20Balance(ctx context.Context, addr string, token Token) (*big.Int, *big.Int, error) {
+func (e ethereumLike) erc20Balance(ctx context.Context, addr string, token Token) (*big.Int, *big.Int, error) {
 	latest, err := e.rpcCallBalance(ctx, addr, token.Contract, "latest")
 	if err != nil {
 		return nil, nil, err
@@ -168,7 +198,7 @@ func (e ethereum) erc20Balance(ctx context.Context, addr string, token Token) (*
 	return latest, pending, nil
 }
 
-func (e ethereum) rpcHexBalance(ctx context.Context, method, addr, tag string) (*big.Int, error) {
+func (e ethereumLike) rpcHexBalance(ctx context.Context, method, addr, tag string) (*big.Int, error) {
 	var raw string
 	if err := RPCDo(ctx, e.jsonRpc, JsonRpcRequest{
 		Method: method,
@@ -180,7 +210,7 @@ func (e ethereum) rpcHexBalance(ctx context.Context, method, addr, tag string) (
 	return parseHexBigInt(raw)
 }
 
-func (e ethereum) rpcCallBalance(ctx context.Context, addr, contract, tag string) (*big.Int, error) {
+func (e ethereumLike) rpcCallBalance(ctx context.Context, addr, contract, tag string) (*big.Int, error) {
 	call := map[string]any{
 		"to":   contract,
 		"data": erc20BalanceOfData(addr),
