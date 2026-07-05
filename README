@@ -9,6 +9,7 @@ currently supports:
 [x] Litecoin
 [x] Bitcoin
 [x] Monero
+[x] Solana (+tokens)
 
 licensed under the [AGPLv3](./LICENSE)
 examples [here](./example_instance_test.go) or on `go doc`
