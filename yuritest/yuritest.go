@@ -3,10 +3,12 @@ package yuritest
 import (
 	"context"
 	"fmt"
+	"io"
 	"testing"
 	"time"
 
 	"github.com/testcontainers/testcontainers-go"
+	tcexec "github.com/testcontainers/testcontainers-go/exec"
 	"github.com/testcontainers/testcontainers-go/network"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
@@ -31,10 +33,11 @@ type Spec struct {
 }
 
 type Container struct {
-	c    testcontainers.Container
-	host string
-	port string
-	name string
+	c            testcontainers.Container
+	host         string
+	port         string
+	unmappedPort string
+	name         string
 }
 
 // New creates a new container env.
@@ -113,10 +116,11 @@ func (e *Env) Run(spec Spec) *Container {
 	}
 
 	container := &Container{
-		c:    c,
-		host: host,
-		port: mapped.Port(),
-		name: containerName,
+		c:            c,
+		host:         host,
+		port:         mapped.Port(),
+		unmappedPort: spec.Port,
+		name:         containerName,
 	}
 
 	e.t.Cleanup(func() {
@@ -154,4 +158,30 @@ func (c *Container) HTTP() string {
 
 func (c *Container) URL(scheme string) string {
 	return fmt.Sprintf("%s://%s:%s", scheme, c.host, c.port)
+}
+
+func (c *Container) UnmappedHTTP() string {
+	return c.UnmappedURL("http")
+}
+
+func (c *Container) UnmappedURL(scheme string) string {
+	return fmt.Sprintf("%s://%s:%s", scheme, c.host, c.unmappedPort)
+}
+
+func (c *Container) Exec(ctx context.Context, cmd []string, opts ...tcexec.ProcessOption) (string, error) {
+	code, reader, err := c.c.Exec(ctx, cmd, opts...)
+	if err != nil {
+		return "", err
+	}
+
+	out, readErr := io.ReadAll(reader)
+	if readErr != nil {
+		return "", readErr
+	}
+
+	if code != 0 {
+		return "", fmt.Errorf("exec %v failed with exit code %d: %s", cmd, code, string(out))
+	}
+
+	return string(out), nil
 }
