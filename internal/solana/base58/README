@@ -1,0 +1,4 @@
+base58 is solana-go's implementation
+
+source: https://github.com/solana-foundation/solana-go/tree/main/base58
+copied license: [LICENSE](./LICENSE)
