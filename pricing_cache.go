@@ -46,6 +46,10 @@ func NewCachedPriceProviderWithTTL(inner PriceProvider, ttl time.Duration) Price
 	}
 }
 
+func (p *cachedPriceProvider) WantsFullChainName() bool {
+	return p.inner.WantsFullChainName()
+}
+
 func (p *cachedPriceProvider) Get(ctx context.Context, currency Currency, chain string, token Token) (int64, error) {
 	if p == nil || p.inner == nil {
 		return -1, fmt.Errorf("cached price provider is not initialized")

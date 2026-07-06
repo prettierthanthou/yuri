@@ -15,6 +15,10 @@ import (
 
 var _ PriceProvider = coinGeckoProvider{}
 
+func (m coinGeckoProvider) WantsFullChainName() bool {
+	return true
+}
+
 var commonFiatCurrencies = []string{
 	"aed", "ars", "aud", "bdt", "bhd", "bmd", "brl", "cad", "chf", "clp", "cny", "czk", "dkk", "eur",
 	"gbp", "gel", "hkd", "huf", "idr", "ils", "inr", "jpy", "krw", "kwd", "lkr", "mmk", "mxn", "myr",
@@ -30,6 +34,10 @@ type marketProvider struct {
 	client *http.Client
 	url    string
 	kind   string
+}
+
+func (m marketProvider) WantsFullChainName() bool {
+	return false
 }
 
 func assetSymbol(chain string, token Token) string {
@@ -275,6 +283,8 @@ func geckoToken(ctx context.Context, client *http.Client, currency Currency, cha
 }
 
 type nullProvider struct{}
+
+func (nullProvider) WantsFullChainName() bool { return false }
 
 func (nullProvider) Get(context.Context, Currency, string, Token) (int64, error) { return 0, nil }
 

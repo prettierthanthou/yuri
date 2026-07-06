@@ -14,6 +14,8 @@ var (
 // PriceProvider respresents some place where we can fetch current prices
 // for a cryptocurrency. A PriceProvider MUST ALWAYS be safe to call concurrently.
 type PriceProvider interface {
+	WantsFullChainName() bool
+
 	// Get fetches the price of a cryptocurrency(/token) from a remote
 	// pricing provider, for example CoinGecko, in the requested currency.
 	//

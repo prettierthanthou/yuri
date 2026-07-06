@@ -166,7 +166,7 @@ func (i *Instance) poll(
 	return nil
 }
 
-func (i *Instance) avgPrice(ctx context.Context, currency Currency, chain string, token Token) (int64, error) {
+func (i *Instance) avgPrice(ctx context.Context, currency Currency, chain CryptoProvider, token Token) (int64, error) {
 	if len(i.opts.Pricing) == 0 {
 		return 0, errors.New("no price providers configured")
 	}
@@ -180,7 +180,13 @@ func (i *Instance) avgPrice(ctx context.Context, currency Currency, chain string
 			return 0, ctx.Err()
 		default:
 		}
-		price, err := p.Get(ctx, currency, chain, token)
+
+		priceSymbol := string(chain.Chain())
+		if !p.WantsFullChainName() {
+			priceSymbol = pricingSymbol(chain)
+		}
+
+		price, err := p.Get(ctx, currency, priceSymbol, token)
 		if err != nil {
 			continue
 		}
@@ -217,9 +223,9 @@ func (i *Instance) NewInvoice(ctx context.Context, invoiceCreate InvoiceCreate) 
 		return Invoice{}, fmt.Errorf("chain %s is not registered", invoiceCreate.Chain)
 	}
 
-	avgPrice, err := i.avgPrice(ctx, invoiceCreate.AmountFiat.Currency, pricingSymbol(chain), invoiceCreate.Token)
+	avgPrice, err := i.avgPrice(ctx, invoiceCreate.AmountFiat.Currency, chain, invoiceCreate.Token)
 	if err != nil {
-		return Invoice{}, err
+		return Invoice{}, fmt.Errorf("Failed to get average price for invoice create: err = %+v invoice = %+v", err, invoiceCreate)
 	}
 
 	if avgPrice <= 0 {
@@ -256,7 +262,7 @@ func (i *Instance) NewInvoice(ctx context.Context, invoiceCreate InvoiceCreate) 
 
 	addr, err := chain.CreateAddress(ctx)
 	if err != nil {
-		return Invoice{}, err
+		return Invoice{}, fmt.Errorf("Failed to create address for invoice: err = %+v invoice = %+v", err, invoiceCreate)
 	}
 
 	inv := Invoice{
@@ -270,7 +276,7 @@ func (i *Instance) NewInvoice(ctx context.Context, invoiceCreate InvoiceCreate) 
 	}
 
 	if err := i.opts.Storage.NewInvoice(ctx, inv); err != nil {
-		return Invoice{}, err
+		return Invoice{}, fmt.Errorf("Failed to save invoice to storage: %+v", err)
 	}
 
 	return inv, nil

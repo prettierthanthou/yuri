@@ -26,6 +26,10 @@ type testingFixedPriceProvider struct {
 	err   error
 }
 
+func (f testingFixedPriceProvider) WantsFullChainName() bool {
+	return true
+}
+
 func (f testingFixedPriceProvider) Get(
 	_ context.Context,
 	_ Currency,
@@ -426,7 +430,7 @@ func TestAvgPrice(t *testing.T) {
 	price, err := instance.avgPrice(
 		context.Background(),
 		USD,
-		"test",
+		&testingFakeCryptoProvider{},
 		Token{},
 	)
 	if err != nil {
@@ -457,7 +461,7 @@ func TestAvgPriceIgnoresFailedProviders(t *testing.T) {
 	price, err := instance.avgPrice(
 		context.Background(),
 		USD,
-		"test",
+		&testingFakeCryptoProvider{},
 		Token{},
 	)
 	if err != nil {
@@ -487,7 +491,7 @@ func TestAvgPriceAllProvidersFail(t *testing.T) {
 	_, err = instance.avgPrice(
 		context.Background(),
 		USD,
-		"test",
+		&testingFakeCryptoProvider{},
 		Token{},
 	)
 
