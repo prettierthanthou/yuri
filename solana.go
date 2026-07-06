@@ -132,7 +132,6 @@ func (s solanaProvider) Poll(ctx context.Context, invoices []Invoice) ([]Invoice
 		}
 
 		for i := range solKeys {
-			log.Printf("%s | latest = %d pending = %d reqstage = %s", solKeys[i], latest[i], pending[i], latestStage)
 			balances[solKeys[i]] = &balanceBalance{
 				latest:  latest[i],
 				pending: pending[i],
