@@ -43,7 +43,7 @@ type PricingSymbolProvider interface {
 // Token represents a smart contract on a respective chain
 // for example, USDT erc20
 type Token struct {
-	Symbol   string
-	Contract string
-	Decimals int64
+	Symbol   string `json:"symbol"`
+	Contract string `json:"contract"`
+	Decimals int64  `json:"decimals"`
 }
