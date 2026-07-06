@@ -5,7 +5,6 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/binary"
-	"log"
 	"math/big"
 
 	"codeberg.org/lewdest/yuri/internal/solana"
