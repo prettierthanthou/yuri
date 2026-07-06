@@ -12,17 +12,17 @@ import (
 // You are required to persist the following:
 // [Invoice.Chain], [Invoice.Address], [Invoice.AmountOwed, [Invoice.AmountPaid], [Invoice.Token]
 type Invoice struct {
-	Chain      Chain
-	Address    string
-	AmountOwed *big.Int
-	AmountPaid *big.Int
-	Token      Token
+	Chain      Chain    `json:"chain"`
+	Address    string   `json:"address"`
+	AmountOwed *big.Int `json:"amount_owed"`
+	AmountPaid *big.Int `json:"amount_paid"`
+	Token      Token    `json:"token"`
 	// if the amountPaid amount has not reached the required confirmations
-	Pending bool
+	Pending bool `json:"pending"`
 
 	// user provided metadata, typically an ID to allow for
 	// quickly locating and updating the Invoice via [Storage.UpdateInvoice]
-	Metadata map[string]any
+	Metadata map[string]any `json:"metadata"`
 }
 
 // Paid determines if an Invoice is fully paid, and accounts for pending funds.
@@ -66,10 +66,10 @@ func (i Invoice) Clone() Invoice {
 }
 
 type InvoiceCreate struct {
-	Chain      Chain
-	Token      Token
-	AmountFiat fiat
-	Metadata   map[string]any
+	Chain      Chain          `json:"chain"`
+	Token      Token          `json:"token"`
+	AmountFiat fiat           `json:"amount_fiat"`
+	Metadata   map[string]any `json:"metadata"`
 }
 
 // Storage represents a user defined storage for storing invoices.

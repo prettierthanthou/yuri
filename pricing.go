@@ -40,13 +40,13 @@ var (
 )
 
 type Currency struct {
-	Code     string
-	Decimals int
+	Code     string `json:"code"`
+	Decimals int    `json:"decimals"`
 }
 
 type fiat struct {
-	Currency Currency
-	Minor    int64
+	Currency Currency `json:"currency"`
+	Minor    int64    `json:"minor"`
 }
 
 // Of takes in the amount.
