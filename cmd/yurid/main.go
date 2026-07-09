@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"log/slog"
@@ -30,26 +31,43 @@ func main() {
 
 	slog.Debug("parsed configuration", "conf", conf)
 
-	storage := &yuri.InMemoryStorage{}
+	database, err := yurid.NewDatabase(conf.DatabaseConfig)
+	if err != nil {
+		slog.Error("failed to open database", "err", err)
+		return
+	}
+
 	instance, err := yuri.New(yuri.Options{
 		Hooks: yuri.Hooks{
 			OnError: func(err error) {
 				slog.Error("Something went wrong during cycle!", "err", err)
 			},
+			OnInvoiceUpdated: func(ctx context.Context, i yuri.Invoice) error {
+				// TODO: maybe send down events via SSE or something? idk
+				slog.Debug("invoice updated", "invoice", i)
+				return nil
+			},
 		},
 		Chains:  conf.Chains,
 		Pricing: conf.PricingProviders,
-		Storage: storage,
+		Storage: database,
 	})
 	if err != nil {
 		slog.Error("failed to create instance", "err", err)
 		return
 	}
 
+	go instance.Run(context.Background())
+
 	slog.Info("created instance", "instance", instance)
 
+	activeChainNames := make([]string, len(conf.Chains))
+	for _, chain := range activeChainNames {
+		activeChainNames = append(activeChainNames, chain)
+	}
+
 	slog.Info("starting REST API at", "url", conf.Addr)
-	api := yurid.NewAPI(conf.Addr, storage, instance)
+	api := yurid.NewAPI(conf.Addr, database, instance, activeChainNames)
 	if err := api.ListenAndServe(); err != nil {
 		slog.Error("api ListenAndServe failed", "err", err)
 	}
