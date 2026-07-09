@@ -211,7 +211,7 @@ func TestInstanceNewInvoiceWithToken(t *testing.T) {
 		t.Fatalf("AmountPaid = %d expected 0", inv.AmountPaid.BitLen())
 	}
 
-	const treeFiddyInCents = 3500000000000000000
+	const treeFiddyInCents int64 = 3500000000000000000
 	if inv.AmountOwed.Cmp(big.NewInt(3500000000000000000)) != 0 {
 		t.Fatalf("AmountOwed = %s expected %d", inv.AmountOwed.String(), treeFiddyInCents)
 	}
@@ -260,7 +260,7 @@ func TestInstanceNewInvoice(t *testing.T) {
 		t.Fatalf("AmountPaid = %d expected 0", inv.AmountPaid.BitLen())
 	}
 
-	const treeFiddyInCents = 3500000000000
+	const treeFiddyInCents int64 = 3500000000000
 	if inv.AmountOwed.Cmp(big.NewInt(3500000000000)) != 0 {
 		t.Fatalf("AmountOwed = %s expected %d", inv.AmountOwed.String(), treeFiddyInCents)
 	}
@@ -312,7 +312,7 @@ func TestInstanceNewInvoiceWithMetadata(t *testing.T) {
 		t.Fatalf("AmountPaid = %d expected 0", inv.AmountPaid.BitLen())
 	}
 
-	const treeFiddyInCents = 3500000000000
+	const treeFiddyInCents int64 = 3500000000000
 	if inv.AmountOwed.Cmp(big.NewInt(3500000000000)) != 0 {
 		t.Fatalf("AmountOwed = %s expected %d", inv.AmountOwed.String(), treeFiddyInCents)
 	}
