@@ -1,6 +1,6 @@
 # yuri
 
-simple, sweet, and quick library for handling cryptocurrency payments in go
+simple, sweet, and quick library/daemon for handling cryptocurrency payments in go
 
 NOTE: this is extremely experimental
 
