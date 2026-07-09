@@ -237,7 +237,7 @@ func TestPollMonero(t *testing.T) {
 			"destinations": []map[string]any{
 				{
 					"address": merchantAddr,
-					"amount":  10_000_000_000,
+					"amount":  int64(10_000_000_000),
 				},
 			},
 		},
