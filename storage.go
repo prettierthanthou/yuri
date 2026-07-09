@@ -3,6 +3,7 @@ package yuri
 import (
 	"context"
 	"errors"
+	"maps"
 	"math/big"
 	"slices"
 	"sync"
@@ -54,6 +55,13 @@ func (i Invoice) Paid() bool {
 func (i Invoice) Clone() Invoice {
 	owedCopied := big.NewInt(0).Set(i.AmountOwed)
 	paidCopied := big.NewInt(0).Set(i.AmountPaid)
+
+	var metaCopied map[string]any
+	if i.Metadata != nil {
+		metaCopied = make(map[string]any, len(i.Metadata))
+		maps.Copy(metaCopied, i.Metadata)
+	}
+
 	return Invoice{
 		Chain:      i.Chain,
 		Address:    i.Address,
@@ -61,7 +69,7 @@ func (i Invoice) Clone() Invoice {
 		AmountPaid: paidCopied,
 		Token:      i.Token,
 		Pending:    i.Pending,
-		Metadata:   i.Metadata,
+		Metadata:   metaCopied,
 	}
 }
 
