@@ -123,7 +123,7 @@ func (i *Instance) runChain(
 	for {
 		derivedCtx, cancel := context.WithTimeout(ctx, i.opts.MaxPollDuration)
 		if err := i.poll(derivedCtx, chain, provider); err != nil {
-			i.reportErr(err)
+			i.reportErr(fmt.Errorf("poll (%s): %+v", chain, err))
 		}
 		cancel()
 
@@ -143,22 +143,22 @@ func (i *Instance) poll(
 ) error {
 	invoices, err := i.opts.Storage.GetActiveInvoices(ctx, chain)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to fetch active invoices: %+v", err)
 	}
 
 	updatedInvoices, err := provider.Poll(ctx, invoices)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed during CryptoProvider poll cycle: %+v", err)
 	}
 
 	if err := i.opts.Storage.UpdateInvoices(ctx, updatedInvoices); err != nil {
-		return err
+		return fmt.Errorf("failed to UpdateInvoices: %+v", err)
 	}
 
 	for _, updated := range updatedInvoices {
 		if i.opts.Hooks.OnInvoiceUpdated != nil {
 			if err := i.opts.Hooks.OnInvoiceUpdated(ctx, updated); err != nil {
-				i.reportErr(err)
+				i.reportErr(fmt.Errorf("failed to update invoices: %+v", err))
 			}
 		}
 	}
