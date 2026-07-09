@@ -21,24 +21,6 @@ func errHasSubstr(t *testing.T, err error, str string) bool {
 	return true
 }
 
-type testingFixedPriceProvider struct {
-	price int64
-	err   error
-}
-
-func (f testingFixedPriceProvider) WantsFullChainName() bool {
-	return true
-}
-
-func (f testingFixedPriceProvider) Get(
-	_ context.Context,
-	_ Currency,
-	_ string,
-	_ Token,
-) (int64, error) {
-	return f.price, f.err
-}
-
 var _ CryptoProvider = &testingFakeCryptoProvider{}
 
 type testingFakeCryptoProvider struct {

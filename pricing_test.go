@@ -1,8 +1,29 @@
 package yuri
 
 import (
+	"context"
 	"testing"
 )
+
+// testingFixedPriceProvider is a small utility for testing
+// against a fake pricing provider.
+type testingFixedPriceProvider struct {
+	price int64
+	err   error
+}
+
+func (f testingFixedPriceProvider) WantsFullChainName() bool {
+	return true
+}
+
+func (f testingFixedPriceProvider) Get(
+	_ context.Context,
+	_ Currency,
+	_ string,
+	_ Token,
+) (int64, error) {
+	return f.price, f.err
+}
 
 func TestPricingFiatConversion(t *testing.T) {
 	f := USD.Of(10.50).Minor
