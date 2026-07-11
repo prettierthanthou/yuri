@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"codeberg.org/lewdest/yuri"
+	"github.com/google/uuid"
 )
 
 type API struct {
@@ -85,15 +85,19 @@ func decodeJSON(r *http.Request, dst any) error {
 type wrappedInvoice struct {
 	Id   string `json:"id"`
 	Paid bool   `json:"paid"`
+	Fiat any    `json:"fiat"`
 	yuri.Invoice
 }
 
 func (a *API) wrapInvoice(id string, inv *yuri.Invoice) wrappedInvoice {
 	cloned := inv.Clone()
+	fiat := cloned.Metadata[yuridInvoiceFiatMetaID]
 	delete(cloned.Metadata, yuridInvoiceUUIDMetaId)
+	delete(cloned.Metadata, yuridInvoiceFiatMetaID)
 	wrapped := wrappedInvoice{
 		Id:      id,
 		Paid:    inv.Paid(),
+		Fiat:    fiat,
 		Invoice: cloned,
 	}
 
@@ -200,6 +204,7 @@ func (a *API) handleNew(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
+	req.Metadata[yuridInvoiceFiatMetaID] = req.AmountFiat
 	if req.ExpiresAt != 0 {
 		req.InvoiceCreate.Metadata[yuridInvoiceExpireyMetaID] = time.UnixMilli(req.ExpiresAt)
 	}

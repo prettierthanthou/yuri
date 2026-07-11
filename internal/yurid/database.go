@@ -10,15 +10,16 @@ import (
 	"math/big"
 	"time"
 
+	"codeberg.org/lewdest/yuri"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5"
-	"codeberg.org/lewdest/yuri"
 	_ "modernc.org/sqlite"
 )
 
 const yuridInvoiceUUIDMetaId = "yurid-uuid"
 const yuridInvoiceExpireyMetaID = "yurid-expirey"
+const yuridInvoiceFiatMetaID = "yurid-fiat-hist"
 
 type DatabaseType string
 
