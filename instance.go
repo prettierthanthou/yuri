@@ -27,8 +27,11 @@ type Hooks struct {
 type Options struct {
 	Chains  []CryptoProvider
 	Pricing []PriceProvider
-	Hooks   Hooks
-	Storage Storage
+	// What form of aggregator should we use for pricing?
+	// The default is [MedianPriceAggregator]
+	PriceAggregator PriceAggregator
+	Hooks           Hooks
+	Storage         Storage
 	// How often we should poll for new changes on each provided
 	// CryptoProvider. The default is 15 seconds.
 	PollEvery time.Duration
@@ -66,6 +69,10 @@ func New(options Options) (*Instance, error) {
 
 	if len(options.Chains) == 0 {
 		return nil, fmt.Errorf("Chains must have atleast 1 CryptoProvider")
+	}
+
+	if options.PriceAggregator == nil {
+		options.PriceAggregator = MedianPriceAggregator{}
 	}
 
 	chains := make(map[Chain]CryptoProvider, len(options.Chains))
@@ -166,40 +173,51 @@ func (i *Instance) poll(
 	return nil
 }
 
-func (i *Instance) avgPrice(ctx context.Context, currency Currency, chain CryptoProvider, token Token) (int64, error) {
+func (i *Instance) getPrice(ctx context.Context, currency Currency, chain CryptoProvider, token Token) (int64, error) {
 	if len(i.opts.Pricing) == 0 {
 		return 0, errors.New("no price providers configured")
 	}
 
-	var sum int64
-	var count int64
-
+	priceQuoteChan := make(chan PriceQuote, len(i.opts.Pricing))
+	var wg sync.WaitGroup
 	for _, p := range i.opts.Pricing {
-		select {
-		case <-ctx.Done():
-			return 0, ctx.Err()
-		default:
-		}
+		wg.Go(func() {
+			select {
+			case <-ctx.Done():
+				priceQuoteChan <- PriceQuote{Err: ctx.Err(), FiatMinorUnits: -1}
+			default:
+			}
 
-		priceSymbol := string(chain.Chain())
-		if !p.WantsFullChainName() {
-			priceSymbol = pricingSymbol(chain)
-		}
+			priceSymbol := string(chain.Chain())
+			if !p.WantsFullChainName() {
+				priceSymbol = pricingSymbol(chain)
+			}
 
-		price, err := p.Get(ctx, currency, priceSymbol, token)
-		if err != nil {
-			continue
-		}
+			price, err := p.Get(ctx, currency, priceSymbol, token)
+			if err != nil {
+				priceQuoteChan <- PriceQuote{Err: err, FiatMinorUnits: -1}
+				return
+			}
 
-		sum += price
-		count++
+			priceQuoteChan <- PriceQuote{
+				Err:            nil,
+				FiatMinorUnits: price,
+			}
+		})
 	}
 
-	if count == 0 {
-		return 0, errors.New("no providers returned valid prices")
+	wg.Wait()
+
+	quotes := make([]PriceQuote, 0, len(i.opts.Pricing))
+	for range i.opts.Pricing {
+		quotes = append(quotes, <-priceQuoteChan)
 	}
 
-	return sum / count, nil
+	if len(quotes) == 0 {
+		return 0, errors.New("no providers returned prices")
+	}
+
+	return i.opts.PriceAggregator.Aggregate(ctx, quotes)
 }
 
 func pricingSymbol(provider CryptoProvider) string {
@@ -223,13 +241,13 @@ func (i *Instance) NewInvoice(ctx context.Context, invoiceCreate InvoiceCreate) 
 		return Invoice{}, fmt.Errorf("chain %s is not registered", invoiceCreate.Chain)
 	}
 
-	avgPrice, err := i.avgPrice(ctx, invoiceCreate.AmountFiat.Currency, chain, invoiceCreate.Token)
+	aggregatedPrice, err := i.getPrice(ctx, invoiceCreate.AmountFiat.Currency, chain, invoiceCreate.Token)
 	if err != nil {
 		return Invoice{}, fmt.Errorf("Failed to get average price for invoice create: err = %+v invoice = %+v", err, invoiceCreate)
 	}
 
-	if avgPrice <= 0 {
-		return Invoice{}, fmt.Errorf("invalid average price: %d", avgPrice)
+	if aggregatedPrice <= 0 {
+		return Invoice{}, fmt.Errorf("invalid average price: %d", aggregatedPrice)
 	}
 
 	cryptoDecimals := chain.Decimals()
@@ -238,7 +256,7 @@ func (i *Instance) NewInvoice(ctx context.Context, invoiceCreate InvoiceCreate) 
 	}
 
 	fiat := big.NewInt(invoiceCreate.AmountFiat.Minor)
-	price := big.NewInt(avgPrice)
+	price := big.NewInt(aggregatedPrice)
 
 	scale := new(big.Int).Exp(
 		ten,

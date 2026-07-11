@@ -393,7 +393,7 @@ func TestNewInvoiceUnknownChain(t *testing.T) {
 	}
 }
 
-func TestAvgPrice(t *testing.T) {
+func TestInstanceGetPriceDefaultMedian(t *testing.T) {
 	instance, err := New(Options{
 		Storage: &InMemoryStorage{},
 		Pricing: []PriceProvider{
@@ -409,7 +409,7 @@ func TestAvgPrice(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	price, err := instance.avgPrice(
+	price, err := instance.getPrice(
 		context.Background(),
 		USD,
 		&testingFakeCryptoProvider{},
@@ -424,7 +424,7 @@ func TestAvgPrice(t *testing.T) {
 	}
 }
 
-func TestAvgPriceIgnoresFailedProviders(t *testing.T) {
+func TestGetPriceIgnoresFailedProviders(t *testing.T) {
 	instance, err := New(Options{
 		Storage: &InMemoryStorage{},
 		Pricing: []PriceProvider{
@@ -440,7 +440,7 @@ func TestAvgPriceIgnoresFailedProviders(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	price, err := instance.avgPrice(
+	price, err := instance.getPrice(
 		context.Background(),
 		USD,
 		&testingFakeCryptoProvider{},
@@ -455,7 +455,7 @@ func TestAvgPriceIgnoresFailedProviders(t *testing.T) {
 	}
 }
 
-func TestAvgPriceAllProvidersFail(t *testing.T) {
+func TestGetPriceAllProvidersFail(t *testing.T) {
 	instance, err := New(Options{
 		Storage: &InMemoryStorage{},
 		Pricing: []PriceProvider{
@@ -470,7 +470,7 @@ func TestAvgPriceAllProvidersFail(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = instance.avgPrice(
+	_, err = instance.getPrice(
 		context.Background(),
 		USD,
 		&testingFakeCryptoProvider{},
