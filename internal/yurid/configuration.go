@@ -7,6 +7,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -77,9 +78,9 @@ type Configuration struct {
 	DatabaseConfig   DatabaseConfig
 }
 
-type stringSliceFlag []string
+type pricingProviderSliceFlag []string
 
-func (s *stringSliceFlag) String() string {
+func (s *pricingProviderSliceFlag) String() string {
 	names := make([]string, 0, len(supportedPricingProviders))
 	for k := range supportedPricingProviders {
 		names = append(names, k)
@@ -88,13 +89,26 @@ func (s *stringSliceFlag) String() string {
 	return strings.Join(names, ", ")
 }
 
-func (s *stringSliceFlag) Set(v string) error {
+func (s *pricingProviderSliceFlag) Set(v string) error {
 	parts := strings.SplitSeq(v, ",")
 
 	for p := range parts {
 		p = strings.TrimSpace(p)
 		if p == "" {
 			continue
+		}
+
+		if p == "ALL" {
+			slog.Debug("found 'ALL' price provider, registering all...")
+			built := make([]string, 0, len(supportedPricingProviders))
+			for k := range supportedPricingProviders {
+				built = append(built, k)
+			}
+
+			slog.Debug("added price providers...", "built", built)
+
+			*s = built
+			return nil
 		}
 
 		if _, ok := supportedPricingProviders[p]; !ok {
@@ -107,7 +121,7 @@ func (s *stringSliceFlag) Set(v string) error {
 	return nil
 }
 
-func (s stringSliceFlag) Contains(v string) bool {
+func (s pricingProviderSliceFlag) Contains(v string) bool {
 	str := s.String()
 	return strings.Contains(str, v)
 }
@@ -153,7 +167,7 @@ func ParseConfig() (Configuration, error) {
 		supportedProviders = append(supportedProviders, priceProviderKey)
 	}
 
-	var pricingProviderNames stringSliceFlag
+	var pricingProviderNames pricingProviderSliceFlag
 	fs.Var(&pricingProviderNames, "price", fmt.Sprintf("List of pricing providers (or ALL) either as new flags or comma seperated: %s", strings.Join(supportedProviders, ", ")))
 
 	if err := fs.Parse(os.Args[1:]); err != nil {
@@ -222,6 +236,7 @@ func ParseConfig() (Configuration, error) {
 		newFunc, ok := supportedPricingProviders[priceProviderName]
 		if !ok {
 			// NOTE: this is redudant as we can never get here but i'd rather.. it just exist
+			slog.Error("unsupported pricing provider before runtime", "name", priceProviderName)
 			return Configuration{}, fmt.Errorf("REALLY BAD STATE!! unsupported pricing provider '%s', please use -help", priceProviderName)
 		}
 
