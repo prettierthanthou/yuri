@@ -204,6 +204,10 @@ func (a *API) handleNew(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
+	if req.Metadata == nil {
+		req.Metadata = map[string]any{}
+	}
+
 	req.Metadata[yuridInvoiceFiatMetaID] = req.AmountFiat
 	if req.ExpiresAt != 0 {
 		req.InvoiceCreate.Metadata[yuridInvoiceExpireyMetaID] = time.UnixMilli(req.ExpiresAt)
