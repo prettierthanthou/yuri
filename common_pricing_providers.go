@@ -437,9 +437,10 @@ func (p marketProvider) Get(ctx context.Context, currency Currency, chain string
 		}
 	case "https://currency-api.pages.dev/v1/currencies/btc.min.json":
 		if m, ok := asMap(payload); ok {
-			btc := m["btc"].(map[string]any)
-			if v, ok := pickAnyNumber(btc, currency.Code); ok {
-				return numberToMinor(currency, v)
+			if btc, ok := m["btc"].(map[string]any); ok {
+				if v, ok := pickAnyNumber(btc, currency.Code); ok {
+					return numberToMinor(currency, v)
+				}
 			}
 		}
 	case "https://desiboard.thevikas.com/api/price":
