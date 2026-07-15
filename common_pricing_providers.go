@@ -74,7 +74,10 @@ func httpClient(c *http.Client) *http.Client {
 
 func parseBody(resp *http.Response, out any) error {
 	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+
+	// 5 MB
+	const maxResponse = 5 << 20
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponse))
 
 	if err != nil {
 		return err
