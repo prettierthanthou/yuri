@@ -217,7 +217,7 @@ func ParseConfig() (Configuration, error) {
 		out.Chains = append(out.Chains, yuri.NewSolana(yuri.SolanaOptions{
 			Hooks: yuri.SolanaHooks{
 				OnNewAddress: func(ctx context.Context, pk1 ed25519.PublicKey, pk2 ed25519.PrivateKey) error {
-					return os.WriteFile(path.Join(cfg.walletOutDir, base64.RawStdEncoding.EncodeToString(pk1)), pk2, os.ModeAppend)
+					return os.WriteFile(path.Join(cfg.walletOutDir, base64.RawStdEncoding.EncodeToString(pk1)), pk2, 0666)
 				},
 			},
 			Rpc: rpc,
