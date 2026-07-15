@@ -198,8 +198,8 @@ func (a *API) handleNew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.AmountFiat.Minor == 0 {
-		writeError(w, http.StatusBadRequest, "amount cannot be zero", nil)
+	if req.AmountFiat.Minor <= 0 {
+		writeError(w, http.StatusBadRequest, "amount cannot be less than or equal to zero", nil)
 		return
 	}
 
