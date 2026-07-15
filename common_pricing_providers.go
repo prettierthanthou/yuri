@@ -130,10 +130,6 @@ func buildURL(base, path string, query map[string]string) string {
 	return u.String()
 }
 
-func minor(currency Currency, rate float64) int64 {
-	return currency.ToMinor(rate)
-}
-
 func pickRate(m map[string]float64, keys ...string) (float64, bool) {
 	for _, k := range keys {
 		if v, ok := m[strings.ToLower(k)]; ok {
@@ -266,7 +262,7 @@ func (p coinGeckoProvider) Get(ctx context.Context, currency Currency, chain str
 		return -1, fmt.Errorf("missing price from coingecko response")
 	}
 
-	return minor(currency, rate), nil
+	return currency.ToMinor(rate), nil
 }
 
 func geckoToken(ctx context.Context, client *http.Client, currency Currency, chain string, token Token) (int64, error) {
@@ -279,15 +275,18 @@ func geckoToken(ctx context.Context, client *http.Client, currency Currency, cha
 	if err := getJSON(ctx, client, raw, &parsed); err != nil {
 		return -1, err
 	}
+
 	row, ok := parsed[strings.ToLower(token.Contract)]
 	if !ok {
 		return -1, ChainNotSupportedErr
 	}
+
 	rate, ok := pickRate(row, currency.Code)
 	if !ok {
 		return -1, fmt.Errorf("missing token price from coingecko response")
 	}
-	return minor(currency, rate), nil
+
+	return currency.ToMinor(rate), nil
 }
 
 type nullProvider struct{}
