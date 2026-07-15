@@ -183,7 +183,7 @@ func (a *API) handleActive(w http.ResponseWriter, r *http.Request) {
 
 type WrappedInvoiceCreate struct {
 	yuri.InvoiceCreate
-	ExpiresAt int64
+	ExpiresAt int64 `json:"expires_at"`
 }
 
 func (a *API) handleNew(w http.ResponseWriter, r *http.Request) {
