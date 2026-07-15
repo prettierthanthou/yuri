@@ -236,7 +236,8 @@ func NewYadioPriceProvider(client *http.Client) PriceProvider {
 	return marketProvider{client: client, url: "https://api.yadio.io/exrates/BTC", kind: "yadio"}
 }
 
-func NewNullPriceProvider() PriceProvider { return nullProvider{} }
+func NewNullPriceProvider() PriceProvider               { return staticProvider{amount: 0} }
+func NewStaticPriceProvider(amount int64) PriceProvider { return staticProvider{amount: amount} }
 
 func (p coinGeckoProvider) Get(ctx context.Context, currency Currency, chain string, token Token) (int64, error) {
 	if !wantFiat(currency) {
@@ -294,11 +295,13 @@ func geckoToken(ctx context.Context, client *http.Client, currency Currency, cha
 	return currency.ToMinor(rate), nil
 }
 
-type nullProvider struct{}
+type staticProvider struct{ amount int64 }
 
-func (nullProvider) WantsFullChainName() bool { return false }
+func (staticProvider) WantsFullChainName() bool { return false }
 
-func (nullProvider) Get(context.Context, Currency, string, Token) (int64, error) { return 0, nil }
+func (s staticProvider) Get(context.Context, Currency, string, Token) (int64, error) {
+	return s.amount, nil
+}
 
 func (p marketProvider) Get(ctx context.Context, currency Currency, chain string, token Token) (int64, error) {
 	if !wantFiat(currency) {
