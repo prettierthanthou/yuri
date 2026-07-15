@@ -18,13 +18,13 @@ import (
 
 type API struct {
 	addr             string
-	storage          *Database
+	storage          Database
 	instance         *yuri.Instance
 	mux              *http.ServeMux
 	activeChainNames []string
 }
 
-func NewAPI(addr string, database *Database, instance *yuri.Instance, activeChainNames []string) *API {
+func NewAPI(addr string, database Database, instance *yuri.Instance, activeChainNames []string) *API {
 	api := &API{
 		addr:             addr,
 		storage:          database,
