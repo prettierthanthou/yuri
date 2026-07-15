@@ -154,7 +154,9 @@ func (a *API) handleActive(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			writeJSON(w, http.StatusOK, []yuri.Invoice{})
+			return
 		}
+
 		writeError(w, http.StatusInternalServerError, "failed to fetch invoices", err)
 		return
 	}
