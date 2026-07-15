@@ -135,7 +135,6 @@ func (i *InMemoryStorage) NewInvoice(_ context.Context, inv Invoice) error {
 
 // UpdateInvoices implements [Storage].
 func (i *InMemoryStorage) UpdateInvoices(_ context.Context, invoices []Invoice) error {
-	// panic("unimplemented")
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
