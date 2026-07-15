@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var _ PriceProvider = coinGeckoProvider{}
@@ -64,12 +65,16 @@ func pairMatchesMarket(pair, base, quote string) bool {
 	return strings.HasPrefix(pair, base) && strings.HasSuffix(pair, quote)
 }
 
+var defaultHTTPClient = &http.Client{
+	Timeout: 15 * time.Second,
+}
+
 func httpClient(c *http.Client) *http.Client {
 	if c != nil {
 		return c
 	}
 
-	return http.DefaultClient
+	return defaultHTTPClient
 }
 
 func parseBody(resp *http.Response, out any) error {
