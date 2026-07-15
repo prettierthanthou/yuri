@@ -420,13 +420,15 @@ func (p marketProvider) Get(ctx context.Context, currency Currency, chain string
 		return -1, unsupportedPairError(chain, token, currency)
 	case "https://ny.bitmynt.no/data/rates.json":
 		if m, ok := asMap(payload); ok {
-			cur := m["current_rate"].(map[string]any)
-			return valueFromAny(cur["bid"], cur["ask"], currency)
+			if cur, ok := m["current_rate"].(map[string]any); ok {
+				return valueFromAny(cur["bid"], cur["ask"], currency)
+			}
 		}
 	case "https://bylls.com/api/price?from_currency=BTC&to_currency=CAD":
 		if m, ok := asMap(payload); ok {
-			pub := m["public_price"].(map[string]any)
-			return numberToMinor(currency, pub["to_price"])
+			if pub, ok := m["public_price"].(map[string]any); ok {
+				return numberToMinor(currency, pub["to_price"])
+			}
 		}
 	case "https://currency-api.pages.dev/v1/currencies/btc.min.json":
 		if m, ok := asMap(payload); ok {
