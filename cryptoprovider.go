@@ -2,7 +2,7 @@ package yuri
 
 import (
 	"context"
-	"crypto/ed25519"
+	"crypto"
 )
 
 // Chain is the full name of the chain in lowercase. (e.g. monero)
@@ -67,5 +67,5 @@ type ProviderHooks struct {
 	// OnNewAddress is called when NewAddress is called, you are expected
 	// to manage your own storage solution for your wallets.
 	// Returning an error from this method results in the address not being generated.
-	OnNewAddress func(context.Context, ed25519.PublicKey, ed25519.PrivateKey) error
+	OnNewAddress func(context.Context, crypto.PublicKey, crypto.PrivateKey) error
 }
