@@ -3,6 +3,8 @@ package yuri
 import (
 	"context"
 	"crypto"
+	"fmt"
+	"strings"
 )
 
 // Chain is the full name of the chain in lowercase. (e.g. monero)
@@ -59,6 +61,36 @@ type PricingSymbolProvider interface {
 // handled differently than a typical Token.
 const NftSymbol = "__YURI_NFT__"
 
+type NftIdentifier struct {
+	// Chain-specific collection identifier.
+	// Ethereum: contract address
+	// Solana: collection mint
+	// Bitcoin Ordinals: inscription collection, etc.
+	Collection string
+
+	// Chain-specific asset identifier.
+	// Ethereum ERC-721: token ID
+	// Solana: mint address
+	// Bitcoin Ordinals: inscription ID
+	Asset string
+}
+
+func NftIdentifierFromString(contract string) (NftIdentifier, bool) {
+	split := strings.Split(contract, "|||")
+	if len(split) != 2 {
+		return NftIdentifier{}, false
+	}
+
+	return NftIdentifier{
+		Collection: split[0],
+		Asset:      split[1],
+	}, true
+}
+
+func (n NftIdentifier) String() string {
+	return fmt.Sprintf("%s|||%s", n.Collection, n.Asset)
+}
+
 // NFT is a wrapper around [Invoice] and [Token] to indicate that
 // a specified Token is in fact an NFT on a specific chain.
 //
@@ -67,12 +99,12 @@ const NftSymbol = "__YURI_NFT__"
 //
 // NFTs are always the following: AmountOwed = 1, AmountPaid = 0.
 // Where >=1 Paid means the NFT was recieved.
-func NFT(chain Chain, nftIdentifier string, metadata map[string]any) InvoiceCreate {
+func NFT(chain Chain, nftIdentifier NftIdentifier, metadata map[string]any) InvoiceCreate {
 	return InvoiceCreate{
 		Chain: chain,
 		Token: Token{
 			Symbol:   NftSymbol,
-			Contract: nftIdentifier,
+			Contract: nftIdentifier.String(),
 			Decimals: 1,
 		},
 		Metadata: metadata,
