@@ -93,7 +93,7 @@ func TestSolanaCreateAddressAndPoll(t *testing.T) {
 	provider := NewSolana(SolanaOptions{
 		isTest: true,
 		Rpc:    rpc.conf,
-		Hooks: SolanaHooks{
+		Hooks: ProviderHooks{
 			OnNewAddress: func(_ context.Context, pub ed25519.PublicKey, priv ed25519.PrivateKey) error {
 				hookPub = base58.Encode([]byte(pub))
 

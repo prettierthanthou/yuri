@@ -17,7 +17,7 @@ type SolanaOptions struct {
 	// Hooks directly manage storing the generated wallets, it is on you
 	// to store your wallets in a safe place... atleast if you want to get
 	// your funds out of the invoice wallets. heh..
-	Hooks SolanaHooks
+	Hooks ProviderHooks
 	Rpc   JsonRpcClientConfig
 	// isTest is an internal flag to allow for `confirmed` to be used over `finalized`
 	// due to the fact solana-test-validator/slopana is just.. shitty and i don't like
@@ -39,18 +39,9 @@ func NewSolana(opts SolanaOptions) solanaProvider {
 var _ CryptoProvider = solanaProvider{}
 var _ PricingSymbolProvider = solanaProvider{}
 
-// SolanaHooks allows the end user to deal with
-// how they want to manage their custodial wallets
-type SolanaHooks struct {
-	// OnNewAddress is called when NewAddress is called, you are expected
-	// to manage your own storage solution for your wallets.
-	// Returning an error from this method results in the address not being generated.
-	OnNewAddress func(context.Context, ed25519.PublicKey, ed25519.PrivateKey) error
-}
-
 type solanaProvider struct {
 	jsonRpc JsonRpcClient
-	hooks   SolanaHooks
+	hooks   ProviderHooks
 	isTest  bool
 }
 

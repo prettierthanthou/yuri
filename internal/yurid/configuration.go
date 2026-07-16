@@ -209,23 +209,36 @@ func ParseConfig() (Configuration, error) {
 		}
 
 		hasSeenAtleast1ValidChainConf = true
-		if chain != yuri.Solana {
-			out.Chains = append(out.Chains, supportedChains[chain](rpc))
-			continue
-		}
+		// if chain != yuri.Solana {
+		// 	continue
+		// }
 
-		if cfg.walletOutDir == "" {
-			return Configuration{}, fmt.Errorf("expected solana to have a wallet-out-dir but instead recieved '%s'", cfg.walletOutDir)
-		}
+		getHooks := func() (yuri.ProviderHooks, error) {
+			if cfg.walletOutDir == "" {
+				return yuri.ProviderHooks{}, fmt.Errorf("expected solana to have a wallet-out-dir but instead recieved '%s'", cfg.walletOutDir)
+			}
 
-		out.Chains = append(out.Chains, yuri.NewSolana(yuri.SolanaOptions{
-			Hooks: yuri.SolanaHooks{
+			return yuri.ProviderHooks{
 				OnNewAddress: func(ctx context.Context, pk1 ed25519.PublicKey, pk2 ed25519.PrivateKey) error {
 					return os.WriteFile(path.Join(cfg.walletOutDir, base64.RawStdEncoding.EncodeToString(pk1)), pk2, 0666)
 				},
-			},
-			Rpc: rpc,
-		}))
+			}, nil
+		}
+
+		switch chain {
+		case yuri.Solana:
+			hooks, err := getHooks()
+			if err != nil {
+				return Configuration{}, err
+			}
+
+			out.Chains = append(out.Chains, yuri.NewSolana(yuri.SolanaOptions{
+				Hooks: hooks,
+				Rpc:   rpc,
+			}))
+		default:
+			out.Chains = append(out.Chains, supportedChains[chain](rpc))
+		}
 	}
 
 	if !hasSeenAtleast1ValidChainConf {

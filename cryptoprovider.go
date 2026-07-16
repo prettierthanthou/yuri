@@ -1,6 +1,9 @@
 package yuri
 
-import "context"
+import (
+	"context"
+	"crypto/ed25519"
+)
 
 // Chain is the full name of the chain in lowercase. (e.g. monero)
 type Chain string
@@ -54,4 +57,15 @@ type Token struct {
 	Symbol   string `json:"symbol"`
 	Contract string `json:"contract"`
 	Decimals int64  `json:"decimals"`
+}
+
+// ProviderHooks allows the end user to deal with
+// how they want to manage their custodial wallets
+// for providers whos native JsonRPC/communication
+// does not bundle a wallet.
+type ProviderHooks struct {
+	// OnNewAddress is called when NewAddress is called, you are expected
+	// to manage your own storage solution for your wallets.
+	// Returning an error from this method results in the address not being generated.
+	OnNewAddress func(context.Context, ed25519.PublicKey, ed25519.PrivateKey) error
 }
