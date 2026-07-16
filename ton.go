@@ -132,6 +132,10 @@ func NewTon(opts ...tonOptions) tonProvider {
 		if opt.httpClient != nil {
 			o.httpClient = opt.httpClient
 		}
+
+		if opt.client != nil {
+			o.client = opt.client
+		}
 	}
 
 	if o.client == nil {
