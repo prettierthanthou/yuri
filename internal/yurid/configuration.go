@@ -227,6 +227,15 @@ func ParseConfig() (Configuration, error) {
 		}
 
 		switch chain {
+		case yuri.Ton:
+			hooks, err := getHooks()
+			if err != nil {
+				return Configuration{}, err
+			}
+
+			// intentionally not providing anything past the hooks
+			// so that we default to the mainnet provider
+			out.Chains = append(out.Chains, yuri.NewTon(hooks))
 		case yuri.Solana:
 			hooks, err := getHooks()
 			if err != nil {
