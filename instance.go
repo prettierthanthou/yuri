@@ -233,12 +233,51 @@ func pricingSymbol(provider CryptoProvider) string {
 
 var ten = big.NewInt(10)
 
+func (i *Instance) NewNFTInvoice(ctx context.Context, invoiceCreate InvoiceCreate) (Invoice, error) {
+	chain, ok := i.chains[invoiceCreate.Chain]
+	if !ok {
+		return Invoice{}, fmt.Errorf("chain %s is not registered", invoiceCreate.Chain)
+	}
+
+	if !chain.SupportsNFTs() {
+		return Invoice{}, fmt.Errorf("chain %s does not support NFTs", invoiceCreate.Chain)
+	}
+
+	addr, err := chain.CreateAddress(ctx)
+	if err != nil {
+		return Invoice{}, fmt.Errorf("Failed to create address for invoice: err = %+v invoice = %+v", err, invoiceCreate)
+	}
+
+	inv := Invoice{
+		Chain:      invoiceCreate.Chain,
+		AmountOwed: big.NewInt(1),
+		AmountPaid: new(big.Int),
+		Token:      invoiceCreate.Token,
+		Pending:    false,
+		Metadata:   invoiceCreate.Metadata,
+		Address:    addr,
+	}
+
+	if err := i.opts.Storage.NewInvoice(ctx, inv); err != nil {
+		return Invoice{}, fmt.Errorf("Failed to save invoice to storage: %+v", err)
+	}
+
+	return inv, nil
+}
+
 // NewInvoice creates a new invoice with the [Instance] using the respective
 // [CryptoProvider] and [PriceProvider]
+//
+// This can be called with an [invoiceCreate] created from [NFT], but will just be
+// routed to [NewNFTInvoice].
 func (i *Instance) NewInvoice(ctx context.Context, invoiceCreate InvoiceCreate) (Invoice, error) {
 	chain, ok := i.chains[invoiceCreate.Chain]
 	if !ok {
 		return Invoice{}, fmt.Errorf("chain %s is not registered", invoiceCreate.Chain)
+	}
+
+	if invoiceCreate.Token != (Token{}) && invoiceCreate.Token.Symbol == NftSymbol {
+		return i.NewNFTInvoice(ctx, invoiceCreate)
 	}
 
 	if invoiceCreate.AmountFiat.Minor <= 0 {

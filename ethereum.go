@@ -77,6 +77,11 @@ type ethereumLike struct {
 	symbol  string
 }
 
+// SupportsNFTs implements [CryptoProvider].
+func (e ethereumLike) SupportsNFTs() bool {
+	return false
+}
+
 // Chain implements [CryptoProvider].
 func (e ethereumLike) Chain() Chain {
 	return e.chain

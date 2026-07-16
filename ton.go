@@ -149,6 +149,11 @@ type tonProvider struct {
 	hooks ProviderHooks
 }
 
+// SupportsNFTs implements [CryptoProvider].
+func (t tonProvider) SupportsNFTs() bool {
+	return false
+}
+
 // PriceSymbol implements [PricingSymbolProvider].
 func (t tonProvider) PriceSymbol() string {
 	return "TON"

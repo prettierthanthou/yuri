@@ -12,6 +12,9 @@ import (
 // Invoice represents the smallest state an invoice can be.
 // You are required to persist the following:
 // [Invoice.Chain], [Invoice.Address], [Invoice.AmountOwed, [Invoice.AmountPaid], [Invoice.Token]
+//
+// Note: An Invoice can either be a fiat amount (e.g. $2 in XMR) OR an NFT (on supported chains)
+// (e.g. @username on Telegram on TON (note @username would be the smart contract addr) )
 type Invoice struct {
 	Chain      Chain    `json:"chain"`
 	Address    string   `json:"address"`

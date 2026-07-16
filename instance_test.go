@@ -28,6 +28,11 @@ type testingFakeCryptoProvider struct {
 	pollState int
 }
 
+// SupportsNFTs implements [CryptoProvider].
+func (t *testingFakeCryptoProvider) SupportsNFTs() bool {
+	return false
+}
+
 // Poll implements [CryptoProvider].
 func (t *testingFakeCryptoProvider) Poll(_ context.Context, invoices []Invoice) ([]Invoice, error) {
 	t.mu.Lock()
@@ -587,6 +592,11 @@ type pollProvider struct {
 	called bool
 }
 
+// SupportsNFTs implements [CryptoProvider].
+func (p *pollProvider) SupportsNFTs() bool {
+	return false
+}
+
 func (p *pollProvider) Poll(
 	_ context.Context,
 	_ []Invoice,
@@ -833,6 +843,11 @@ type contextObservedProvider struct {
 	cancelled chan struct{}
 }
 
+// SupportsNFTs implements [CryptoProvider].
+func (p *contextObservedProvider) SupportsNFTs() bool {
+	return false
+}
+
 func (p *contextObservedProvider) Chain() Chain {
 	return "test"
 }
@@ -935,6 +950,10 @@ func (p *cancelAwareProvider) Poll(ctx context.Context, _ []Invoice) ([]Invoice,
 	<-ctx.Done()
 	close(p.done)
 	return nil, ctx.Err()
+}
+
+func (p *cancelAwareProvider) SupportsNFTs() bool {
+	return false
 }
 
 func (p *cancelAwareProvider) Chain() Chain {

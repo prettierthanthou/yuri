@@ -36,6 +36,9 @@ type CryptoProvider interface {
 	//
 	// Please see [Invoice]'s documentation for the expcted semantics of [Invoice.AmountPaid] and [Invoice.Pending]
 	Poll(context.Context, []Invoice) ([]Invoice, error)
+
+	// SupportsNFTs indicates if this specific [CryptoProvider] supports [NFT]
+	SupportsNFTs() bool
 }
 
 // InvoicePollChanged is a small utility to determine if two Invoices are equal for polling.
@@ -49,6 +52,28 @@ func InvoicePollChanged(old, updated Invoice) bool {
 // This is optional and exists so pricing providers can avoid hardcoded symbol maps.
 type PricingSymbolProvider interface {
 	PriceSymbol() string
+}
+
+// NftSymbol is used as a [Token.Symbol] to indicate
+// that a specific [Token] is an NFT and should be
+// handled differently than a typical Token.
+const NftSymbol = "__YURI_NFT__"
+
+// NFT is a wrapper around [Invoice] and [Token] to indicate that
+// a specified Token is in fact an NFT on a specific chain.
+//
+// [nftIdentifier] is either the smart contract, or other form
+// of identifying an NFT on the wanted chain.
+func NFT(chain Chain, nftIdentifier string, metadata map[string]any) InvoiceCreate {
+	return InvoiceCreate{
+		Chain: chain,
+		Token: Token{
+			Symbol:   NftSymbol,
+			Contract: nftIdentifier,
+			Decimals: 1,
+		},
+		Metadata: metadata,
+	}
 }
 
 // Token represents a smart contract on a respective chain
