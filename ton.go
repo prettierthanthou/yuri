@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math/big"
-	"net/http"
 	"time"
 
 	"github.com/xssnick/tonutils-go/address"
@@ -108,31 +107,24 @@ func (c *tonChainClient) JettonBalance(
 }
 
 type tonOptions struct {
-	configUrl  string
-	httpClient *http.Client
-	client     chainClient
+	configUrl string
+	client    chainClient
 }
 
 const tonMainnetPublic = "https://ton-blockchain.github.io/global.config.json"
 const tonTestnetPublic = "https://ton-blockchain.github.io/testnet-global.config.json"
 
-func TonWithMainnet() tonOptions                       { return tonOptions{configUrl: tonMainnetPublic} }
-func TonWithTestnet() tonOptions                       { return tonOptions{configUrl: tonTestnetPublic} }
-func TonWithHttpClient(client *http.Client) tonOptions { return tonOptions{httpClient: client} }
-func TonWithApi(api *ton.APIClient) tonOptions         { return tonOptions{client: &tonChainClient{api: api}} }
+func TonWithMainnet() tonOptions               { return tonOptions{configUrl: tonMainnetPublic} }
+func TonWithTestnet() tonOptions               { return tonOptions{configUrl: tonTestnetPublic} }
+func TonWithApi(api *ton.APIClient) tonOptions { return tonOptions{client: &tonChainClient{api: api}} }
 
 func NewTon(hooks ProviderHooks, opts ...tonOptions) tonProvider {
 	o := &tonOptions{
-		configUrl:  tonMainnetPublic,
-		httpClient: http.DefaultClient,
+		configUrl: tonMainnetPublic,
 	}
 	for _, opt := range opts {
 		if opt.configUrl != "" {
 			o.configUrl = opt.configUrl
-		}
-
-		if opt.httpClient != nil {
-			o.httpClient = opt.httpClient
 		}
 
 		if opt.client != nil {
