@@ -25,7 +25,7 @@ type chainBlock struct {
 
 // chainClient exists to purely do mock tests
 type chainClient interface {
-	CreateAddress(ctx context.Context) (string, error)
+	CreateAddress(ctx context.Context, hooks ProviderHooks) (string, error)
 	CurrentBlock(ctx context.Context) (*chainBlock, error)
 	NativeBalance(ctx context.Context, block *chainBlock, addr string) (*big.Int, error)
 	JettonBalance(ctx context.Context, block *chainBlock, addr string, contract string) (*big.Int, error)
@@ -35,7 +35,7 @@ type tonChainClient struct {
 	api *ton.APIClient
 }
 
-func (c *tonChainClient) CreateAddress(ctx context.Context) (string, error) {
+func (c *tonChainClient) CreateAddress(ctx context.Context, hooks ProviderHooks) (string, error) {
 	seed := wallet.NewSeed()
 
 	w, err := wallet.FromSeedWithOptions(c.api, seed, wallet.V5R1Final)
@@ -43,7 +43,9 @@ func (c *tonChainClient) CreateAddress(ctx context.Context) (string, error) {
 		return "", err
 	}
 
-	// TODO: persist seed/hooks
+	if err := hooks.OnNewAddress(ctx, w.PrivateKey().Public(), w.PrivateKey()); err != nil {
+		return "", err
+	}
 
 	return w.WalletAddress().String(), nil
 }
@@ -119,7 +121,7 @@ func TonWithTestnet() tonOptions                       { return tonOptions{confi
 func TonWithHttpClient(client *http.Client) tonOptions { return tonOptions{httpClient: client} }
 func TonWithApi(api *ton.APIClient) tonOptions         { return tonOptions{client: &tonChainClient{api: api}} }
 
-func NewTon(opts ...tonOptions) tonProvider {
+func NewTon(hooks ProviderHooks, opts ...tonOptions) tonProvider {
 	o := &tonOptions{
 		configUrl:  tonMainnetPublic,
 		httpClient: http.DefaultClient,
@@ -151,11 +153,12 @@ func NewTon(opts ...tonOptions) tonProvider {
 		o.client = &tonChainClient{api: api}
 	}
 
-	return tonProvider{api: o.client}
+	return tonProvider{api: o.client, hooks: hooks}
 }
 
 type tonProvider struct {
-	api chainClient
+	api   chainClient
+	hooks ProviderHooks
 }
 
 // PriceSymbol implements [PricingSymbolProvider].
@@ -175,7 +178,7 @@ func (t tonProvider) Decimals() int64 {
 
 // CreateAddress implements [CryptoProvider].
 func (t tonProvider) CreateAddress(ctx context.Context) (string, error) {
-	return t.api.CreateAddress(ctx)
+	return t.api.CreateAddress(ctx, t.hooks)
 }
 
 // Poll implements [CryptoProvider].

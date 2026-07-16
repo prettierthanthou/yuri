@@ -7,7 +7,7 @@ import (
 )
 
 func TestTonChainAndDecimals(t *testing.T) {
-	p := NewTon(TonWithApi(nil))
+	p := NewTon(ProviderHooks{}, TonWithApi(nil))
 
 	if p.Chain() != Ton {
 		t.Fatal("expected TON chain")
@@ -28,7 +28,7 @@ type fakeChainClient struct {
 	err error
 }
 
-func (f *fakeChainClient) CreateAddress(context.Context) (string, error) {
+func (f *fakeChainClient) CreateAddress(context.Context, ProviderHooks) (string, error) {
 	return f.address, f.err
 }
 
