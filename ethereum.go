@@ -3,6 +3,7 @@ package yuri
 import (
 	"context"
 	"fmt"
+	"log"
 	"math/big"
 	"strings"
 )
@@ -28,6 +29,9 @@ var _ CryptoProvider = ethereumLike{}
 var _ PricingSymbolProvider = ethereumLike{}
 
 // NewEthereum constructs a new ethereumLike CryptoProvider preconfigured for the standard Eth chain.
+//
+// All JsonRPCs for Ethereum must support `personal_newAccount` and you MUST trust
+// the node/JsonRPC as the wallet is made on the node.
 func NewEthereum(rpcConf JsonRpcClientConfig) ethereumLike {
 	return ethereumLike{
 		jsonRpc: NewJsonRpcClient(rpcConf),
@@ -37,6 +41,9 @@ func NewEthereum(rpcConf JsonRpcClientConfig) ethereumLike {
 }
 
 // NewBNB constructs a new ethereumLike CryptoProvider preconfigured for the BNB chain.
+//
+// All JsonRPCs for BNB must support `personal_newAccount` and you MUST trust
+// the node/JsonRPC as the wallet is made on the node.
 func NewBNB(rpcConf JsonRpcClientConfig) ethereumLike {
 	return ethereumLike{
 		jsonRpc: NewJsonRpcClient(rpcConf),
@@ -47,6 +54,12 @@ func NewBNB(rpcConf JsonRpcClientConfig) ethereumLike {
 
 // NewEthereumLike constructs a new ethereumLike CryptoProvider for generic EVM compatible
 // chains. For example Eth(base), BNB, Eth(eth).
+//
+// EthereumLike is dependent on the Ethereum JSON RPC, any EVM compatible chain which
+// still implements the ETH JsonRPC will work.
+//
+// All JsonRPCs for EthereumLike must support `personal_newAccount` and you MUST trust
+// the node/JsonRPC as the wallet is made on the node.
 //
 // Chain is the name of the chain, this must be unique.
 // Symbol is the pricing symbol, for example "ETH" for Eth(eth).
@@ -145,10 +158,10 @@ func (e ethereumLike) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, 
 		default:
 		}
 
-		inv := invoices[i].Clone()
-		key := inv.Address
-		if inv.Token != (Token{}) {
-			key = tokenBalanceKey(inv.Address, inv.Token)
+		updatedInvoice := invoices[i].Clone()
+		key := updatedInvoice.Address
+		if updatedInvoice.Token != (Token{}) {
+			key = tokenBalanceKey(updatedInvoice.Address, updatedInvoice.Token)
 		}
 
 		bal := balances[key]
@@ -156,11 +169,15 @@ func (e ethereumLike) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, 
 			bal = &balanceBalance{pending: new(big.Int), latest: new(big.Int)}
 		}
 
-		inv.AmountPaid = new(big.Int).Set(bal.pending)
-		inv.Pending =
-			bal.latest.Cmp(inv.AmountOwed) < 0 &&
-				bal.pending.Cmp(inv.AmountOwed) >= 0
-		newInvoices = append(newInvoices, inv)
+		updatedInvoice.AmountPaid = new(big.Int).Set(bal.pending)
+		updatedInvoice.Pending =
+			bal.latest.Cmp(updatedInvoice.AmountOwed) < 0 &&
+				bal.pending.Cmp(updatedInvoice.AmountOwed) >= 0
+
+		if InvoicePollChanged(invoices[i], updatedInvoice) {
+			log.Printf("invoice change: a = %+v b = %+v", invoices[i], updatedInvoice)
+			newInvoices = append(newInvoices, updatedInvoice)
+		}
 	}
 
 	return newInvoices, nil

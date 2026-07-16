@@ -149,22 +149,43 @@ func TestEthereumCreateAddressAndPoll(t *testing.T) {
 		},
 	}
 
-	updated, err := provider.Poll(ctx, []Invoice{nativeInvoice, tokenInvoice})
+	allInvoices := []Invoice{nativeInvoice, tokenInvoice}
+	invoicesPoll1, err := provider.Poll(ctx, allInvoices)
 	if err != nil {
 		t.Fatalf("Poll pending: %v", err)
 	}
 
-	if got := updated[0].AmountPaid.String(); got != "20" {
-		t.Fatalf("native AmountPaid = %s expected 20", got)
-	}
-	if updated[0].Pending {
-		t.Fatalf("expected native invoice to remain unconfirmed before mining")
+	var native *Invoice
+	var token *Invoice
+	for _, inv := range invoicesPoll1 {
+		if inv.Token != (Token{}) {
+			token = &inv
+			continue
+		}
+
+		native = &inv
 	}
 
-	if got := updated[1].AmountPaid.String(); got != "100" {
+	if native == nil {
+		t.Fatalf("poll(1) failed to find updated native")
+	}
+
+	if got := native.AmountPaid.String(); got != "25" {
+		t.Fatalf("native AmountPaid = %s expected 25 (pending)", got)
+	}
+
+	if !native.Pending {
+		t.Fatalf("expected native invoice to be pending before mining")
+	}
+
+	if token == nil {
+		t.Fatalf("poll(1) failed to find token")
+	}
+
+	if got := token.AmountPaid.String(); got != "100" {
 		t.Fatalf("token AmountPaid = %s expected 100", got)
 	}
-	if updated[1].Pending {
+	if token.Pending {
 		t.Fatalf("expected token invoice to be settled")
 	}
 
@@ -174,15 +195,32 @@ func TestEthereumCreateAddressAndPoll(t *testing.T) {
 		t.Fatalf("evm_mine: %v", err)
 	}
 
-	updated, err = provider.Poll(ctx, updated)
+	poll2Invoices, err := provider.Poll(ctx, allInvoices)
 	if err != nil {
 		t.Fatalf("Poll mined: %v", err)
 	}
 
-	if got := updated[0].AmountPaid.String(); got != "25" {
+	for _, inv := range poll2Invoices {
+		if inv.Token != (Token{}) {
+			continue
+		}
+
+		native = &inv
+	}
+
+	if got := native.AmountPaid.String(); got != "25" {
 		t.Fatalf("native AmountPaid = %s expected 25 after mining", got)
 	}
-	if !updated[0].Paid() {
+
+	if native.Pending {
+		t.Fatalf("expected native invoice to no longer be pending after mining")
+	}
+
+	if !native.Paid() {
+		t.Fatalf("expected native invoice to be paid after mining")
+	}
+
+	if !native.Paid() {
 		t.Fatalf("expected native invoice to be paid after mining")
 	}
 }
@@ -307,7 +345,8 @@ func TestEthereumPollPendingBalance(t *testing.T) {
 		AmountPaid: big.NewInt(0),
 	}
 
-	got, err := provider.Poll(ctx, []Invoice{invoice})
+	allInvoices := []Invoice{invoice}
+	got, err := provider.Poll(ctx, allInvoices)
 	if err != nil {
 		t.Fatalf("Poll: %v", err)
 	}

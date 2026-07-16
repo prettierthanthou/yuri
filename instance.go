@@ -241,6 +241,10 @@ func (i *Instance) NewInvoice(ctx context.Context, invoiceCreate InvoiceCreate) 
 		return Invoice{}, fmt.Errorf("chain %s is not registered", invoiceCreate.Chain)
 	}
 
+	if invoiceCreate.AmountFiat.Minor <= 0 {
+		return Invoice{}, fmt.Errorf("fiat invoice price was less than or equal to zero (%d)", invoiceCreate.AmountFiat.Minor)
+	}
+
 	aggregatedPrice, err := i.getPrice(ctx, invoiceCreate.AmountFiat.Currency, chain, invoiceCreate.Token)
 	if err != nil {
 		return Invoice{}, fmt.Errorf("Failed to get average price for invoice create: err = %+v invoice = %+v", err, invoiceCreate)

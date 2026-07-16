@@ -18,13 +18,13 @@ import (
 
 type API struct {
 	addr             string
-	storage          *Database
+	storage          Database
 	instance         *yuri.Instance
 	mux              *http.ServeMux
 	activeChainNames []string
 }
 
-func NewAPI(addr string, database *Database, instance *yuri.Instance, activeChainNames []string) *API {
+func NewAPI(addr string, database Database, instance *yuri.Instance, activeChainNames []string) *API {
 	api := &API{
 		addr:             addr,
 		storage:          database,
@@ -154,7 +154,9 @@ func (a *API) handleActive(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			writeJSON(w, http.StatusOK, []yuri.Invoice{})
+			return
 		}
+
 		writeError(w, http.StatusInternalServerError, "failed to fetch invoices", err)
 		return
 	}
@@ -181,7 +183,7 @@ func (a *API) handleActive(w http.ResponseWriter, r *http.Request) {
 
 type WrappedInvoiceCreate struct {
 	yuri.InvoiceCreate
-	ExpiresAt int64
+	ExpiresAt int64 `json:"expires_at"`
 }
 
 func (a *API) handleNew(w http.ResponseWriter, r *http.Request) {
@@ -196,13 +198,17 @@ func (a *API) handleNew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.AmountFiat.Minor == 0 {
-		writeError(w, http.StatusBadRequest, "amount cannot be zero", nil)
+	if req.AmountFiat.Minor <= 0 {
+		writeError(w, http.StatusBadRequest, "amount cannot be less than or equal to zero", nil)
 		return
 	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
+
+	if req.Metadata == nil {
+		req.Metadata = map[string]any{}
+	}
 
 	req.Metadata[yuridInvoiceFiatMetaID] = req.AmountFiat
 	if req.ExpiresAt != 0 {

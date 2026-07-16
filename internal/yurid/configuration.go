@@ -102,6 +102,10 @@ func (s *pricingProviderSliceFlag) Set(v string) error {
 			slog.Debug("found 'ALL' price provider, registering all...")
 			built := make([]string, 0, len(supportedPricingProviders))
 			for k := range supportedPricingProviders {
+				if k == "null" {
+					continue
+				}
+
 				built = append(built, k)
 			}
 
@@ -217,7 +221,7 @@ func ParseConfig() (Configuration, error) {
 		out.Chains = append(out.Chains, yuri.NewSolana(yuri.SolanaOptions{
 			Hooks: yuri.SolanaHooks{
 				OnNewAddress: func(ctx context.Context, pk1 ed25519.PublicKey, pk2 ed25519.PrivateKey) error {
-					return os.WriteFile(path.Join(cfg.walletOutDir, base64.RawStdEncoding.EncodeToString(pk1)), pk2, os.ModeAppend)
+					return os.WriteFile(path.Join(cfg.walletOutDir, base64.RawStdEncoding.EncodeToString(pk1)), pk2, 0666)
 				},
 			},
 			Rpc: rpc,
@@ -238,6 +242,10 @@ func ParseConfig() (Configuration, error) {
 			// NOTE: this is redudant as we can never get here but i'd rather.. it just exist
 			slog.Error("unsupported pricing provider before runtime", "name", priceProviderName)
 			return Configuration{}, fmt.Errorf("REALLY BAD STATE!! unsupported pricing provider '%s', please use -help", priceProviderName)
+		}
+
+		if priceProviderName == "null" {
+			slog.Warn("null pricing provider is enabled, you most likely do not want this!")
 		}
 
 		provider := newFunc(client)

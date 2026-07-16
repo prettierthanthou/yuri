@@ -181,7 +181,9 @@ func (s solanaProvider) Poll(ctx context.Context, invoices []Invoice) ([]Invoice
 			bal.latest.Cmp(cp.AmountOwed) < 0 &&
 				bal.pending.Cmp(cp.AmountOwed) >= 0
 
-		out = append(out, cp)
+		if InvoicePollChanged(inv, cp) {
+			out = append(out, cp)
+		}
 	}
 
 	return out, nil

@@ -172,7 +172,9 @@ func (b bitcoinLike) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, e
 			updated.AmountPaid.Cmp(updated.AmountOwed) >= 0 &&
 				bal.confirmed.Cmp(updated.AmountOwed) < 0
 
-		newInvoices = append(newInvoices, updated)
+		if InvoicePollChanged(invoices[idx], updated) {
+			newInvoices = append(newInvoices, updated)
+		}
 	}
 
 	return newInvoices, nil

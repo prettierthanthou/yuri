@@ -221,13 +221,14 @@ func TestPollMonero(t *testing.T) {
 		Metadata:   map[string]any{},
 	}
 
-	invoices, err := monero.Poll(t.Context(), []Invoice{inv})
+	allInvoices := []Invoice{inv}
+	poll1ResultInvoices, err := monero.Poll(t.Context(), allInvoices)
 	if err != nil {
 		t.Fatalf("Poll() = %q", err)
 	}
 
-	if len(invoices) != 1 {
-		t.Fatalf("Poll() should have returned 1 invoice back")
+	if len(poll1ResultInvoices) != 0 {
+		t.Fatalf("Poll() should have returned 0 invoices back")
 	}
 
 	start = time.Now()
@@ -262,12 +263,12 @@ func TestPollMonero(t *testing.T) {
 	})
 	t.Log("merchantJsonRpc refresh:", time.Since(start))
 
-	invoices, err = monero.Poll(t.Context(), invoices)
+	poll2ResultInvoices, err := monero.Poll(t.Context(), allInvoices)
 	if err != nil {
 		t.Fatalf("Poll2() = %q", err)
 	}
 
-	if !invoices[0].Pending {
+	if !poll2ResultInvoices[0].Pending {
 		t.Fatalf("Invoice should be pending after 1 conf")
 	}
 
@@ -280,16 +281,16 @@ func TestPollMonero(t *testing.T) {
 		Method: "refresh",
 	})
 	t.Log("merchantJsonRpc refresh:", time.Since(start))
-	invoices, err = monero.Poll(t.Context(), invoices)
+	poll3ResultValues, err := monero.Poll(t.Context(), allInvoices)
 	if err != nil {
 		t.Fatalf("Poll3() = %q", err)
 	}
 
-	if invoices[0].Pending {
+	if poll3ResultValues[0].Pending {
 		t.Fatalf("Invoice should no longer be pending after 9 more blocks")
 	}
 
-	if !invoices[0].Paid() {
+	if !poll3ResultValues[0].Paid() {
 		t.Fatalf("Invoice should be paid")
 	}
 }

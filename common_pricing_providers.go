@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var _ PriceProvider = coinGeckoProvider{}
@@ -64,17 +65,24 @@ func pairMatchesMarket(pair, base, quote string) bool {
 	return strings.HasPrefix(pair, base) && strings.HasSuffix(pair, quote)
 }
 
+var defaultHTTPClient = &http.Client{
+	Timeout: 15 * time.Second,
+}
+
 func httpClient(c *http.Client) *http.Client {
 	if c != nil {
 		return c
 	}
 
-	return http.DefaultClient
+	return defaultHTTPClient
 }
 
 func parseBody(resp *http.Response, out any) error {
 	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+
+	// 5 MB
+	const maxResponse = 5 << 20
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponse))
 
 	if err != nil {
 		return err
@@ -108,6 +116,11 @@ func getJSON(ctx context.Context, client *http.Client, raw string, out any) erro
 		return errors.New("pricing provider rate limited")
 	}
 
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+
 	return parseBody(resp, out)
 }
 
@@ -120,10 +133,6 @@ func buildURL(base, path string, query map[string]string) string {
 	}
 	u.RawQuery = q.Encode()
 	return u.String()
-}
-
-func minor(currency Currency, rate float64) int64 {
-	return currency.ToMinor(rate)
 }
 
 func pickRate(m map[string]float64, keys ...string) (float64, bool) {
@@ -227,7 +236,8 @@ func NewYadioPriceProvider(client *http.Client) PriceProvider {
 	return marketProvider{client: client, url: "https://api.yadio.io/exrates/BTC", kind: "yadio"}
 }
 
-func NewNullPriceProvider() PriceProvider { return nullProvider{} }
+func NewNullPriceProvider() PriceProvider               { return staticProvider{amount: 0} }
+func NewStaticPriceProvider(amount int64) PriceProvider { return staticProvider{amount: amount} }
 
 func (p coinGeckoProvider) Get(ctx context.Context, currency Currency, chain string, token Token) (int64, error) {
 	if !wantFiat(currency) {
@@ -258,7 +268,7 @@ func (p coinGeckoProvider) Get(ctx context.Context, currency Currency, chain str
 		return -1, fmt.Errorf("missing price from coingecko response")
 	}
 
-	return minor(currency, rate), nil
+	return currency.ToMinor(rate), nil
 }
 
 func geckoToken(ctx context.Context, client *http.Client, currency Currency, chain string, token Token) (int64, error) {
@@ -271,22 +281,27 @@ func geckoToken(ctx context.Context, client *http.Client, currency Currency, cha
 	if err := getJSON(ctx, client, raw, &parsed); err != nil {
 		return -1, err
 	}
+
 	row, ok := parsed[strings.ToLower(token.Contract)]
 	if !ok {
 		return -1, ChainNotSupportedErr
 	}
+
 	rate, ok := pickRate(row, currency.Code)
 	if !ok {
 		return -1, fmt.Errorf("missing token price from coingecko response")
 	}
-	return minor(currency, rate), nil
+
+	return currency.ToMinor(rate), nil
 }
 
-type nullProvider struct{}
+type staticProvider struct{ amount int64 }
 
-func (nullProvider) WantsFullChainName() bool { return false }
+func (staticProvider) WantsFullChainName() bool { return false }
 
-func (nullProvider) Get(context.Context, Currency, string, Token) (int64, error) { return 0, nil }
+func (s staticProvider) Get(context.Context, Currency, string, Token) (int64, error) {
+	return s.amount, nil
+}
 
 func (p marketProvider) Get(ctx context.Context, currency Currency, chain string, token Token) (int64, error) {
 	if !wantFiat(currency) {
@@ -372,78 +387,97 @@ func (p marketProvider) Get(ctx context.Context, currency Currency, chain string
 
 	switch p.url {
 	case "https://api.bb.no/v1/price/nok":
-		m := payload.(map[string]any)
-		return valueFromAny(m["bid"], m["ask"], currency)
+		if m, ok := asMap(payload); ok {
+			return valueFromAny(m["bid"], m["ask"], currency)
+		}
+		return -1, unsupportedPairError(chain, token, currency)
 	case "https://api.btcturk.com/api/v2/ticker":
-		m := payload.(map[string]any)
-		if data, ok := m["data"].([]any); ok {
-			for _, item := range data {
-				row := item.(map[string]any)
-				if pairMatchesMarket(fmt.Sprint(row["pairNormalized"]), base, currency.Code) {
-					return valueFromAny(row["bid"], row["ask"], currency)
+		if m, ok := asMap(payload); ok {
+			if data, ok := m["data"].([]any); ok {
+				for _, item := range data {
+					if row, ok := item.(map[string]any); ok {
+						if pairMatchesMarket(fmt.Sprint(row["pairNormalized"]), base, currency.Code) {
+							return valueFromAny(row["bid"], row["ask"], currency)
+						}
+					}
 				}
 			}
 		}
 		return -1, unsupportedPairError(chain, token, currency)
 	case "https://public.bitbank.cc/tickers":
-		m := payload.(map[string]any)
-		if data, ok := m["data"].([]any); ok {
-			for _, item := range data {
-				row := item.(map[string]any)
-				if pairMatchesMarket(fmt.Sprint(row["pair"]), base, currency.Code) {
-					return valueFromAny(row["buy"], row["sell"], currency)
+		if m, ok := asMap(payload); ok {
+			if data, ok := m["data"].([]any); ok {
+				for _, item := range data {
+					if row, ok := item.(map[string]any); ok {
+						if pairMatchesMarket(fmt.Sprint(row["pair"]), base, currency.Code) {
+							return valueFromAny(row["buy"], row["sell"], currency)
+						}
+					}
 				}
 			}
 		}
 		return -1, unsupportedPairError(chain, token, currency)
 	case "https://trex.bitcoin.co.ke/btcpay/rates":
-		m := payload.(map[string]any)
-		if btc, ok := m["BTC"].(map[string]any); ok {
-			if v, ok := pickAnyNumber(btc, currency.Code); ok {
-				return numberToMinor(currency, v)
+		if m, ok := asMap(payload); ok {
+			if btc, ok := m["BTC"].(map[string]any); ok {
+				if v, ok := pickAnyNumber(btc, currency.Code); ok {
+					return numberToMinor(currency, v)
+				}
 			}
 		}
 		return -1, unsupportedPairError(chain, token, currency)
 	case "https://ny.bitmynt.no/data/rates.json":
-		m := payload.(map[string]any)
-		cur := m["current_rate"].(map[string]any)
-		return valueFromAny(cur["bid"], cur["ask"], currency)
+		if m, ok := asMap(payload); ok {
+			if cur, ok := m["current_rate"].(map[string]any); ok {
+				return valueFromAny(cur["bid"], cur["ask"], currency)
+			}
+		}
 	case "https://bylls.com/api/price?from_currency=BTC&to_currency=CAD":
-		m := payload.(map[string]any)
-		pub := m["public_price"].(map[string]any)
-		return numberToMinor(currency, pub["to_price"])
+		if m, ok := asMap(payload); ok {
+			if pub, ok := m["public_price"].(map[string]any); ok {
+				return numberToMinor(currency, pub["to_price"])
+			}
+		}
 	case "https://currency-api.pages.dev/v1/currencies/btc.min.json":
-		m := payload.(map[string]any)
-		btc := m["btc"].(map[string]any)
-		if v, ok := pickAnyNumber(btc, currency.Code); ok {
-			return numberToMinor(currency, v)
+		if m, ok := asMap(payload); ok {
+			if btc, ok := m["btc"].(map[string]any); ok {
+				if v, ok := pickAnyNumber(btc, currency.Code); ok {
+					return numberToMinor(currency, v)
+				}
+			}
 		}
 	case "https://desiboard.thevikas.com/api/price":
-		m := payload.(map[string]any)
-		if v, ok := pickAnyNumber(m, "BTC"+currency.Code); ok {
-			return numberToMinor(currency, v)
+		if m, ok := asMap(payload); ok {
+			if v, ok := pickAnyNumber(m, "BTC"+currency.Code); ok {
+				return numberToMinor(currency, v)
+			}
 		}
 		return -1, unsupportedPairError(chain, token, currency)
 	case "https://api.yadio.io/exrates/BTC":
-		m := payload.(map[string]any)
-		btc := m["BTC"].(map[string]any)
-		if v, ok := pickAnyNumber(btc, currency.Code); ok {
-			return numberToMinor(currency, v)
+		if m, ok := asMap(payload); ok {
+			if btc, ok := m["BTC"].(map[string]any); ok {
+				if v, ok := pickAnyNumber(btc, currency.Code); ok {
+					return numberToMinor(currency, v)
+				}
+			}
 		}
 		return -1, unsupportedPairError(chain, token, currency)
 	case "https://api.bitflyer.jp/v1/ticker":
-		m := payload.(map[string]any)
-		if strings.Contains(strings.ToUpper(fmt.Sprint(m["product_code"])), assetSymbol(chain, token)) {
-			return valueFromAny(m["best_bid"], m["best_ask"], currency)
+		if m, ok := asMap(payload); ok {
+			if strings.Contains(strings.ToUpper(fmt.Sprint(m["product_code"])), assetSymbol(chain, token)) {
+				return valueFromAny(m["best_bid"], m["best_ask"], currency)
+			}
 		}
 		return -1, unsupportedPairError(chain, token, currency)
 	case "https://api.bitpay.com/rates":
-		m := payload.(map[string]any)
-		if data, ok := m["data"].([]any); ok {
-			for _, item := range data {
-				row := item.(map[string]any)
-				if strings.EqualFold(fmt.Sprint(row["code"]), currency.Code) {
-					return numberToMinor(currency, row["rate"])
+		if m, ok := asMap(payload); ok {
+			if data, ok := m["data"].([]any); ok {
+				for _, item := range data {
+					if row, ok := item.(map[string]any); ok {
+						if strings.EqualFold(fmt.Sprint(row["code"]), currency.Code) {
+							return numberToMinor(currency, row["rate"])
+						}
+					}
 				}
 			}
 		}
@@ -451,43 +485,47 @@ func (p marketProvider) Get(ctx context.Context, currency Currency, chain string
 	case "https://api.coindcx.com/exchange/ticker":
 		if data, ok := payload.([]any); ok {
 			for _, item := range data {
-				row := item.(map[string]any)
-				market := fmt.Sprint(row["market"])
-				if market == "" {
-					continue
-				}
+				if row, ok := item.(map[string]any); ok {
+					market := fmt.Sprint(row["market"])
+					if market == "" {
+						continue
+					}
 
-				bid, bok := asFloat(row["bid"])
-				ask, aok := asFloat(row["ask"])
-				if bok && aok && pairMatchesMarket(market, base, currency.Code) {
-					return numberToMinor(currency, (bid+ask)/2)
+					bid, bok := asFloat(row["bid"])
+					ask, aok := asFloat(row["ask"])
+					if bok && aok && pairMatchesMarket(market, base, currency.Code) {
+						return numberToMinor(currency, (bid+ask)/2)
+					}
 				}
 			}
 		}
 		return -1, unsupportedPairError(chain, token, currency)
 	case "https://coinmate.io/api/tickerAll":
-		m := payload.(map[string]any)
-		if data, ok := m["data"].(map[string]any); ok {
-			for _, v := range data {
-				row := v.(map[string]any)
-				if pairMatchesMarket(fmt.Sprint(row["pair"]), base, currency.Code) {
-					return valueFromAny(row["bid"], row["ask"], currency)
+		if m, ok := asMap(payload); ok {
+			if data, ok := m["data"].(map[string]any); ok {
+				for _, v := range data {
+					if row, ok := v.(map[string]any); ok {
+						if pairMatchesMarket(fmt.Sprint(row["pair"]), base, currency.Code) {
+							return valueFromAny(row["bid"], row["ask"], currency)
+						}
+					}
 				}
 			}
 		}
 		return -1, unsupportedPairError(chain, token, currency)
 	case "https://api.exchange.cryptomkt.com/api/3/public/ticker/":
-		m := payload.(map[string]any)
-		for _, pair := range []string{base + "ARS", base + "CLP", base + "BRL"} {
-			if row, ok := m[pair].(map[string]any); ok {
-				if bid, bok := asFloat(row["bid"]); bok {
-					if ask, aok := asFloat(row["ask"]); aok {
-						return numberToMinor(currency, (bid+ask)/2)
+		if m, ok := asMap(payload); ok {
+			for _, pair := range []string{base + "ARS", base + "CLP", base + "BRL"} {
+				if row, ok := m[pair].(map[string]any); ok {
+					if bid, bok := asFloat(row["bid"]); bok {
+						if ask, aok := asFloat(row["ask"]); aok {
+							return numberToMinor(currency, (bid+ask)/2)
+						}
 					}
-				}
 
-				if last, ok := asFloat(row["last"]); ok {
-					return numberToMinor(currency, last)
+					if last, ok := asFloat(row["last"]); ok {
+						return numberToMinor(currency, last)
+					}
 				}
 			}
 		}
@@ -495,47 +533,54 @@ func (p marketProvider) Get(ctx context.Context, currency Currency, chain string
 	case "https://api.hitbtc.com/api/2/public/ticker":
 		if data, ok := payload.([]any); ok {
 			for _, item := range data {
-				row := item.(map[string]any)
-				if pairMatchesMarket(fmt.Sprint(row["symbol"]), base, currency.Code) {
-					return valueFromStrings(currency, row["bid"], row["ask"])
+				if row, ok := item.(map[string]any); ok {
+					if pairMatchesMarket(fmt.Sprint(row["symbol"]), base, currency.Code) {
+						return valueFromStrings(currency, row["bid"], row["ask"])
+					}
 				}
 			}
 		}
 		return -1, unsupportedPairError(chain, token, currency)
 	case "https://api.kraken.com/0/public/Ticker":
-		m := payload.(map[string]any)
-		if result, ok := m["result"].(map[string]any); ok {
-			for _, rowv := range result {
-				row := rowv.(map[string]any)
-				return valueFromStrings(currency, row["b"].([]any), row["a"].([]any))
+		if m, ok := asMap(payload); ok {
+			if result, ok := m["result"].(map[string]any); ok {
+				for _, rowv := range result {
+					if row, ok := rowv.(map[string]any); ok {
+						return valueFromStrings(currency, row["b"].([]any), row["a"].([]any))
+					}
+				}
 			}
 		}
 		return -1, unsupportedPairError(chain, token, currency)
 	case "https://api.luno.com/api/1/tickers":
-		m := payload.(map[string]any)
-		if data, ok := m["tickers"].([]any); ok {
-			for _, item := range data {
-				row := item.(map[string]any)
-				if pairMatchesMarket(fmt.Sprint(row["pair"]), base, currency.Code) {
-					bid, bok := asFloat(row["bid"])
-					ask, aok := asFloat(row["ask"])
-					if bok && aok && bid <= ask {
-						return numberToMinor(currency, (bid+ask)/2)
+		if m, ok := asMap(payload); ok {
+			if data, ok := m["tickers"].([]any); ok {
+				for _, item := range data {
+					if row, ok := item.(map[string]any); ok {
+						if pairMatchesMarket(fmt.Sprint(row["pair"]), base, currency.Code) {
+							bid, bok := asFloat(row["bid"])
+							ask, aok := asFloat(row["ask"])
+							if bok && aok && bid <= ask {
+								return numberToMinor(currency, (bid+ask)/2)
+							}
+						}
 					}
 				}
 			}
 		}
 		return -1, unsupportedPairError(chain, token, currency)
 	case "https://api.ripiotrade.co/v4/public/tickers":
-		m := payload.(map[string]any)
-		if data, ok := m["data"].([]any); ok {
-			for _, item := range data {
-				row := item.(map[string]any)
-				if pairMatchesMarket(fmt.Sprint(row["pair"]), base, currency.Code) {
-					bid, bok := asFloat(row["bid"])
-					ask, aok := asFloat(row["ask"])
-					if bok && aok && bid <= ask {
-						return numberToMinor(currency, (bid+ask)/2)
+		if m, ok := asMap(payload); ok {
+			if data, ok := m["data"].([]any); ok {
+				for _, item := range data {
+					if row, ok := item.(map[string]any); ok {
+						if pairMatchesMarket(fmt.Sprint(row["pair"]), base, currency.Code) {
+							bid, bok := asFloat(row["bid"])
+							ask, aok := asFloat(row["ask"])
+							if bok && aok && bid <= ask {
+								return numberToMinor(currency, (bid+ask)/2)
+							}
+						}
 					}
 				}
 			}

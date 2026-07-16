@@ -22,15 +22,23 @@ type CryptoProvider interface {
 	// Decimals gets the amount of decimals for the Native currency of this provider
 	Decimals() int64
 
-	// Poll gets called with the Invoices with a matching [Chain].
-	// It is expected to return the updated values for each invoice.
+	// Poll checks the supplied invoice for a Chain against the blockchain,
+	// and returns only the [Invoice]s which have updated.
 	//
-	// You are expected to return a new [Invoice] with updated balances,
-	// or anything else of relevance. You are expected to copy over metadata
-	// between the invoices.
+	// Providers MUST NEVER mutate the provided invoices. See [Invoice.Clone]
+	// Providers should preserve all fields as required by [Invoice], and only
+	// mutate the business state of the Invoice. (Balances, Pending)
 	//
-	// Please view [Invoice]'s comments if you are implementing this.
+	// An empty slice should be returned if no invoices changed.
+	//
+	// Please see [Invoice]'s documentation for the expcted semantics of [Invoice.AmountPaid] and [Invoice.Pending]
 	Poll(context.Context, []Invoice) ([]Invoice, error)
+}
+
+// InvoicePollChanged is a small utility to determine if two Invoices are equal for polling.
+func InvoicePollChanged(old, updated Invoice) bool {
+	return old.Pending != updated.Pending ||
+		old.AmountPaid.Cmp(updated.AmountPaid) != 0
 }
 
 // PricingSymbolProvider can be implemented by CryptoProvider implementations

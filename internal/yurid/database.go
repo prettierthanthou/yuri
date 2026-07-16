@@ -13,7 +13,7 @@ import (
 	"codeberg.org/lewdest/yuri"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
-	_ "github.com/jackc/pgx/v5"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 )
 
@@ -34,19 +34,27 @@ type DatabaseConfig struct {
 	DSN  string
 }
 
-var _ yuri.Storage = (*Database)(nil)
+var _ yuri.Storage = (*database)(nil)
+var _ Database = (*database)(nil)
 
-type Database struct {
+type Database interface {
+	yuri.Storage
+	GetInvoiceByID(ctx context.Context, id string) (*yuri.Invoice, error)
+	NewInvoiceWithExpirey(ctx context.Context, inv yuri.Invoice, expiresAt time.Time) (uuid.UUID, error)
+	ensureSchema() error
+}
+
+type database struct {
 	db *sql.DB
 }
 
-func NewDatabase(conf DatabaseConfig) (*Database, error) {
+func NewDatabase(conf DatabaseConfig) (*database, error) {
 	db, err := sql.Open(string(conf.Type), conf.DSN)
 	if err != nil {
 		return nil, err
 	}
 
-	database := &Database{db: db}
+	database := &database{db: db}
 	if err := database.ensureSchema(); err != nil {
 		return nil, err
 	}
@@ -54,7 +62,7 @@ func NewDatabase(conf DatabaseConfig) (*Database, error) {
 	return database, nil
 }
 
-func (d *Database) ensureSchema() error {
+func (d *database) ensureSchema() error {
 	_, err := d.db.Exec(`
 	create table if not exists "invoice" (
 		id TEXT NOT NULL PRIMARY KEY,
@@ -72,7 +80,7 @@ func (d *Database) ensureSchema() error {
 	return err
 }
 
-func (d *Database) GetInvoiceByID(ctx context.Context, id string) (*yuri.Invoice, error) {
+func (d *database) GetInvoiceByID(ctx context.Context, id string) (*yuri.Invoice, error) {
 	row := d.db.QueryRowContext(ctx, `
 		select chain, address, amount_owed, amount_paid, token, metadata, expires_at
 		from invoice
@@ -128,7 +136,7 @@ func (d *Database) GetInvoiceByID(ctx context.Context, id string) (*yuri.Invoice
 }
 
 // GetActiveInvoices implements [yuri.Storage].
-func (d *Database) GetActiveInvoices(ctx context.Context, chain yuri.Chain) ([]yuri.Invoice, error) {
+func (d *database) GetActiveInvoices(ctx context.Context, chain yuri.Chain) ([]yuri.Invoice, error) {
 	rows, err := d.db.QueryContext(ctx, `
 		select id, chain, address, amount_owed, amount_paid, token, metadata, expires_at
 		from "invoice"
@@ -201,7 +209,7 @@ func (d *Database) GetActiveInvoices(ctx context.Context, chain yuri.Chain) ([]y
 	return collectedInvoices, rows.Err()
 }
 
-func (d *Database) NewInvoiceWithExpirey(ctx context.Context, inv yuri.Invoice, expiresAt time.Time) (uuid.UUID, error) {
+func (d *database) NewInvoiceWithExpirey(ctx context.Context, inv yuri.Invoice, expiresAt time.Time) (uuid.UUID, error) {
 	id, err := uuid.NewV7()
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("uuid: %w", err)
@@ -244,7 +252,7 @@ func (d *Database) NewInvoiceWithExpirey(ctx context.Context, inv yuri.Invoice, 
 }
 
 // NewInvoice implements [yuri.Storage].
-func (d *Database) NewInvoice(ctx context.Context, inv yuri.Invoice) error {
+func (d *database) NewInvoice(ctx context.Context, inv yuri.Invoice) error {
 	_, ok := inv.Metadata[yuridInvoiceExpireyMetaID]
 	if !ok {
 		_, err := d.NewInvoiceWithExpirey(ctx, inv, time.Now().Add(30*time.Minute))
@@ -261,7 +269,7 @@ func (d *Database) NewInvoice(ctx context.Context, inv yuri.Invoice) error {
 }
 
 // UpdateInvoices implements [yuri.Storage].
-func (d *Database) UpdateInvoices(ctx context.Context, invoices []yuri.Invoice) error {
+func (d *database) UpdateInvoices(ctx context.Context, invoices []yuri.Invoice) error {
 	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
