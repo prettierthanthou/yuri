@@ -64,6 +64,9 @@ const NftSymbol = "__YURI_NFT__"
 //
 // [nftIdentifier] is either the smart contract, or other form
 // of identifying an NFT on the wanted chain.
+//
+// NFTs are always the following: AmountOwed = 1, AmountPaid = 0.
+// Where >=1 Paid means the NFT was recieved.
 func NFT(chain Chain, nftIdentifier string, metadata map[string]any) InvoiceCreate {
 	return InvoiceCreate{
 		Chain: chain,
