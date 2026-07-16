@@ -7,7 +7,10 @@ import (
 )
 
 func TestTonChainAndDecimals(t *testing.T) {
-	p := NewTon(ProviderHooks{}, TonWithApi(nil))
+	p := NewTon(TonOptions{
+		Client: nil,
+		Hooks:  ProviderHooks{},
+	})
 
 	if p.Chain() != Ton {
 		t.Fatal("expected TON chain")

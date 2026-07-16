@@ -233,9 +233,15 @@ func ParseConfig() (Configuration, error) {
 				return Configuration{}, err
 			}
 
-			// intentionally not providing anything past the hooks
-			// so that we default to the mainnet provider
-			out.Chains = append(out.Chains, yuri.NewTon(hooks))
+			host := cfg.Host
+			if host == "" {
+				host = yuri.TonMainnetPublic
+			}
+
+			out.Chains = append(out.Chains, yuri.NewTon(yuri.TonOptions{
+				ConfigUrl: host,
+				Hooks:     hooks,
+			}))
 		case yuri.Solana:
 			hooks, err := getHooks()
 			if err != nil {

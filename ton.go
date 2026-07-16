@@ -106,46 +106,42 @@ func (c *tonChainClient) JettonBalance(
 	return new(big.Int).Set(balance), nil
 }
 
-type tonOptions struct {
-	configUrl string
-	client    chainClient
+type TonOptions struct {
+	ConfigUrl string
+	Client    chainClient
+	Hooks     ProviderHooks
 }
 
-const tonMainnetPublic = "https://ton-blockchain.github.io/global.config.json"
-const tonTestnetPublic = "https://ton-blockchain.github.io/testnet-global.config.json"
+const TonMainnetPublic = "https://ton-blockchain.github.io/global.config.json"
+const TonTestnetPublic = "https://ton-blockchain.github.io/testnet-global.config.json"
 
-func TonWithMainnet() tonOptions               { return tonOptions{configUrl: tonMainnetPublic} }
-func TonWithTestnet() tonOptions               { return tonOptions{configUrl: tonTestnetPublic} }
-func TonWithApi(api *ton.APIClient) tonOptions { return tonOptions{client: &tonChainClient{api: api}} }
+// NewTon creates a new [tonProvider]. If there is not a [chainClient] provided
+// a [liteclient.ConnectionPool] with [TonMainnetPublic] connections is created.
+//
+// This is equivilant to calling
+//
+//	NewTon(opts, TonMainnetPublic)
+func NewTon(opts TonOptions) tonProvider {
+	return NewTonWithConfigUrl(opts, TonMainnetPublic)
+}
 
-func NewTon(hooks ProviderHooks, opts ...tonOptions) tonProvider {
-	o := &tonOptions{
-		configUrl: tonMainnetPublic,
-	}
-	for _, opt := range opts {
-		if opt.configUrl != "" {
-			o.configUrl = opt.configUrl
-		}
-
-		if opt.client != nil {
-			o.client = opt.client
-		}
-	}
-
-	if o.client == nil {
+// NewTonWithConfigUrl creates a new [tonProvider] and configures a [liteclient.ConnectionPool]
+// to the provided [configUrl]
+func NewTonWithConfigUrl(opts TonOptions, configUrl string) tonProvider {
+	if opts.Client == nil {
 		client := liteclient.NewConnectionPool()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		if err := client.AddConnectionsFromConfigUrl(ctx, o.configUrl); err != nil {
+		if err := client.AddConnectionsFromConfigUrl(ctx, opts.ConfigUrl); err != nil {
 			panic(fmt.Sprintf("Ton AddConnectionsFromConfigUrl failed: %+v", err))
 		}
 
 		api := ton.NewAPIClient(client)
-		o.client = &tonChainClient{api: api}
+		opts.Client = &tonChainClient{api: api}
 	}
 
-	return tonProvider{api: o.client, hooks: hooks}
+	return tonProvider{api: opts.Client, hooks: opts.Hooks}
 }
 
 type tonProvider struct {
