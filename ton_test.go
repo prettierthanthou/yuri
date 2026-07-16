@@ -53,7 +53,7 @@ func (f *fakeChainClient) JettonBalance(
 	return f.jetton, f.err
 }
 
-func TestTonProvider_CreateAddress(t *testing.T) {
+func TestTonProviderCreateAddress(t *testing.T) {
 	const expectedTonAddr = "ton123"
 	client := &fakeChainClient{
 		address: expectedTonAddr,
@@ -71,7 +71,7 @@ func TestTonProvider_CreateAddress(t *testing.T) {
 	}
 }
 
-func TestTonProvider_Poll_NativeBalanceChanged(t *testing.T) {
+func TestTonProviderPollNativeBalanceChanged(t *testing.T) {
 	client := &fakeChainClient{
 		block:  &chainBlock{},
 		native: big.NewInt(100),
@@ -114,7 +114,7 @@ func TestTonProvider_Poll_NativeBalanceChanged(t *testing.T) {
 	}
 }
 
-func TestTonProvider_Poll_NoChanges(t *testing.T) {
+func TestTonProviderPollNoChanges(t *testing.T) {
 	client := &fakeChainClient{
 		block:  &chainBlock{},
 		native: big.NewInt(2),
@@ -140,7 +140,7 @@ func TestTonProvider_Poll_NoChanges(t *testing.T) {
 	}
 }
 
-func TestTonProvider_Poll_JettonBalanceChanged(t *testing.T) {
+func TestTonProviderPollJettonBalanceChanged(t *testing.T) {
 	client := &fakeChainClient{
 		block:  &chainBlock{},
 		jetton: big.NewInt(42),
