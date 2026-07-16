@@ -3,6 +3,7 @@ package yuri
 import (
 	"context"
 	"fmt"
+	"log"
 	"math/big"
 	"strings"
 )
@@ -145,10 +146,10 @@ func (e ethereumLike) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, 
 		default:
 		}
 
-		inv := invoices[i].Clone()
-		key := inv.Address
-		if inv.Token != (Token{}) {
-			key = tokenBalanceKey(inv.Address, inv.Token)
+		updatedInvoice := invoices[i].Clone()
+		key := updatedInvoice.Address
+		if updatedInvoice.Token != (Token{}) {
+			key = tokenBalanceKey(updatedInvoice.Address, updatedInvoice.Token)
 		}
 
 		bal := balances[key]
@@ -156,11 +157,15 @@ func (e ethereumLike) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, 
 			bal = &balanceBalance{pending: new(big.Int), latest: new(big.Int)}
 		}
 
-		inv.AmountPaid = new(big.Int).Set(bal.pending)
-		inv.Pending =
-			bal.latest.Cmp(inv.AmountOwed) < 0 &&
-				bal.pending.Cmp(inv.AmountOwed) >= 0
-		newInvoices = append(newInvoices, inv)
+		updatedInvoice.AmountPaid = new(big.Int).Set(bal.pending)
+		updatedInvoice.Pending =
+			bal.latest.Cmp(updatedInvoice.AmountOwed) < 0 &&
+				bal.pending.Cmp(updatedInvoice.AmountOwed) >= 0
+
+		if InvoicePollChanged(invoices[i], updatedInvoice) {
+			log.Printf("invoice change: a = %+v b = %+v", invoices[i], updatedInvoice)
+			newInvoices = append(newInvoices, updatedInvoice)
+		}
 	}
 
 	return newInvoices, nil

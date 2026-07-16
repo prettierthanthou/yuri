@@ -216,13 +216,14 @@ func TestBitcoinPoll(t *testing.T) {
 	}
 
 	// FIRST POLL should be unpaid
-	invoices, err := provider.Poll(ctx, []Invoice{inv})
+	allInvoices := []Invoice{inv}
+	invoicesPoll1, err := provider.Poll(ctx, allInvoices)
 	if err != nil {
 		t.Fatalf("Poll: %v", err)
 	}
 
-	if invoices[0].AmountPaid.Cmp(big.NewInt(0)) != 0 {
-		t.Fatalf("expected no payment yet")
+	if len(invoicesPoll1) != 0 {
+		t.Fatalf("Poll(1) should return 0 invoices recieved: %+v", err)
 	}
 
 	// CUSTOMER pays merchant
@@ -240,12 +241,12 @@ func TestBitcoinPoll(t *testing.T) {
 	bitcoinMineBlocks(t, miner, minerAddr, 1)
 
 	// POLL should detect partial payment
-	invoices, err = provider.Poll(ctx, invoices)
+	invoicesPoll2, err := provider.Poll(ctx, allInvoices)
 	if err != nil {
 		t.Fatalf("Poll2: %v", err)
 	}
 
-	if invoices[0].AmountPaid.Cmp(big.NewInt(0)) <= 0 {
+	if invoicesPoll2[0].AmountPaid.Cmp(big.NewInt(0)) <= 0 {
 		t.Fatalf("expected partial payment detected")
 	}
 
@@ -263,16 +264,16 @@ func TestBitcoinPoll(t *testing.T) {
 
 	bitcoinMineBlocks(t, miner, minerAddr, 2)
 
-	invoices, err = provider.Poll(ctx, invoices)
+	invoicesPoll3, err := provider.Poll(ctx, allInvoices)
 	if err != nil {
 		t.Fatalf("Poll final: %v", err)
 	}
 
-	if invoices[0].Pending {
+	if invoicesPoll3[0].Pending {
 		t.Fatalf("expected invoice settled")
 	}
 
-	if !invoices[0].Paid() {
+	if !invoicesPoll3[0].Paid() {
 		t.Fatalf("expected invoice paid")
 	}
 }

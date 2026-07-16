@@ -58,7 +58,7 @@ func TestSolanaChainAndDecimals(t *testing.T) {
 	}
 }
 
-func pollUntil(t *testing.T, ctx context.Context, provider CryptoProvider, invoice Invoice, cond func(Invoice) bool) Invoice {
+func pollUntil(t *testing.T, ctx context.Context, provider CryptoProvider, invoice Invoice, cond func(*Invoice) bool) Invoice {
 	t.Helper()
 
 	const pollIterations = 50
@@ -73,7 +73,7 @@ func pollUntil(t *testing.T, ctx context.Context, provider CryptoProvider, invoi
 			t.Fatalf("Poll: %v", err)
 		}
 
-		if cond(invs[0]) {
+		if cond(&invs[0]) {
 			return invs[0]
 		}
 
@@ -123,10 +123,14 @@ func TestSolanaCreateAddressAndPoll(t *testing.T) {
 		AmountPaid: big.NewInt(0),
 	}
 
-	// initial state
-	pollUntil(t, ctx, provider, invoice, func(inv Invoice) bool {
-		return inv.AmountPaid.Cmp(big.NewInt(0)) == 0
-	})
+	poll1Invoices, err := provider.Poll(ctx, []Invoice{invoice})
+	if err != nil {
+		t.Fatalf("Poll: %v", err)
+	}
+
+	if len(poll1Invoices) != 0 {
+		t.Fatalf("Poll(1) should return 0 invoices recieved: %+v", err)
+	}
 
 	const airdrop1 = int64(1_500_000_000)
 	const airdrop2 = int64(1_000_000_000)
@@ -144,7 +148,7 @@ func TestSolanaCreateAddressAndPoll(t *testing.T) {
 		t.Fatalf("airdrop not finalized: %v", err)
 	}
 
-	partial := pollUntil(t, ctx, provider, invoice, func(inv Invoice) bool {
+	partial := pollUntil(t, ctx, provider, invoice, func(inv *Invoice) bool {
 		return inv.AmountPaid.Cmp(big.NewInt(airdrop1)) == 0
 	})
 
@@ -169,7 +173,7 @@ func TestSolanaCreateAddressAndPoll(t *testing.T) {
 		t.Fatalf("airdrop2 not finalized: %v", err)
 	}
 
-	final := pollUntil(t, ctx, provider, invoice, func(inv Invoice) bool {
+	final := pollUntil(t, ctx, provider, invoice, func(inv *Invoice) bool {
 		return inv.AmountPaid.Cmp(big.NewInt(2_500_000_000)) >= 0
 	})
 
@@ -285,13 +289,14 @@ echo "SENDER_ATA=$SENDER_ATA"
 		AmountPaid: big.NewInt(0),
 	}
 
-	invoices, err := chain.Poll(ctx, []Invoice{inv})
+	allInvoices := []Invoice{inv}
+	invoicesPoll1, err := chain.Poll(ctx, allInvoices)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if invoices[0].Paid() {
-		t.Fatal("invoice unexpectedly paid")
+	if len(invoicesPoll1) != 0 {
+		t.Fatalf("Poll(1) should return 0 invoices recieved: %+v", err)
 	}
 
 	_, err = container.Exec(ctx, []string{
@@ -317,7 +322,7 @@ spl-token transfer \
 		t.Fatal(err)
 	}
 
-	invoices, err = chain.Poll(ctx, invoices)
+	invoicesPoll2, err := chain.Poll(ctx, allInvoices)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -328,7 +333,7 @@ spl-token transfer \
 	// 	t.Fatalf("invoice should be paid. inv %+v", invoices[0])
 	// }
 
-	if invoices[0].AmountPaid.Cmp(big.NewInt(100_000_000_000)) != 0 {
-		t.Fatalf("AmountPaid=%v", invoices[0].AmountPaid)
+	if invoicesPoll2[0].AmountPaid.Cmp(big.NewInt(100_000_000_000)) != 0 {
+		t.Fatalf("AmountPaid=%v", invoicesPoll2[0].AmountPaid)
 	}
 }

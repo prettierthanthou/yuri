@@ -118,8 +118,9 @@ func (m monero) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, error)
 			updated := invoices[idx].Clone()
 			updated.AmountPaid = new(big.Int).SetUint64(subaddress.Balance)
 			updated.Pending = (updated.AmountPaid.Cmp(updated.AmountOwed) >= 0) && !(new(big.Int).SetUint64(subaddress.UnlockedBalance).Cmp(updated.AmountOwed) >= 0)
-
-			newInvoices = append(newInvoices, updated)
+			if InvoicePollChanged(invoices[idx], updated) {
+				newInvoices = append(newInvoices, updated)
+			}
 		}
 	}
 
