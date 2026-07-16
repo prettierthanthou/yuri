@@ -130,7 +130,7 @@ func (e ethereumLike) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, 
 		}
 
 		inv := invoices[i]
-		if inv.Token.Symbol == NftSymbol {
+		if inv.Token != (Token{}) && inv.Token.Symbol == NftSymbol {
 			latest, pending, err := e.erc721Ownership(ctx, inv.Address, inv.Token)
 			if err != nil {
 				return nil, err
