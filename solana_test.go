@@ -2,6 +2,7 @@ package yuri
 
 import (
 	"context"
+	"crypto"
 	"crypto/ed25519"
 	"fmt"
 	"math/big"
@@ -94,10 +95,10 @@ func TestSolanaCreateAddressAndPoll(t *testing.T) {
 		isTest: true,
 		Rpc:    rpc.conf,
 		Hooks: ProviderHooks{
-			OnNewAddress: func(_ context.Context, pub ed25519.PublicKey, priv ed25519.PrivateKey) error {
-				hookPub = base58.Encode([]byte(pub))
+			OnNewAddress: func(_ context.Context, pub crypto.PublicKey, priv crypto.PrivateKey) error {
+				hookPub = base58.Encode([]byte(pub.(ed25519.PublicKey)))
 
-				if len(priv) == 0 {
+				if len(priv.(ed25519.PrivateKey)) == 0 {
 					t.Fatal("expected private key to be populated")
 				}
 				return nil

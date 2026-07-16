@@ -2,6 +2,7 @@ package yurid
 
 import (
 	"context"
+	"crypto"
 	"crypto/ed25519"
 	"encoding/base64"
 	"errors"
@@ -219,8 +220,8 @@ func ParseConfig() (Configuration, error) {
 			}
 
 			return yuri.ProviderHooks{
-				OnNewAddress: func(ctx context.Context, pk1 ed25519.PublicKey, pk2 ed25519.PrivateKey) error {
-					return os.WriteFile(path.Join(cfg.walletOutDir, base64.RawStdEncoding.EncodeToString(pk1)), pk2, 0666)
+				OnNewAddress: func(ctx context.Context, pk1 crypto.PublicKey, pk2 crypto.PrivateKey) error {
+					return os.WriteFile(path.Join(cfg.walletOutDir, base64.RawStdEncoding.EncodeToString(pk1.(ed25519.PublicKey))), pk2.(ed25519.PrivateKey), 0666)
 				},
 			}, nil
 		}
