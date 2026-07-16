@@ -29,6 +29,9 @@ var _ CryptoProvider = ethereumLike{}
 var _ PricingSymbolProvider = ethereumLike{}
 
 // NewEthereum constructs a new ethereumLike CryptoProvider preconfigured for the standard Eth chain.
+//
+// All JsonRPCs for Ethereum must support `personal_newAccount` and you MUST trust
+// the node/JsonRPC as the wallet is made on the node.
 func NewEthereum(rpcConf JsonRpcClientConfig) ethereumLike {
 	return ethereumLike{
 		jsonRpc: NewJsonRpcClient(rpcConf),
@@ -38,6 +41,9 @@ func NewEthereum(rpcConf JsonRpcClientConfig) ethereumLike {
 }
 
 // NewBNB constructs a new ethereumLike CryptoProvider preconfigured for the BNB chain.
+//
+// All JsonRPCs for BNB must support `personal_newAccount` and you MUST trust
+// the node/JsonRPC as the wallet is made on the node.
 func NewBNB(rpcConf JsonRpcClientConfig) ethereumLike {
 	return ethereumLike{
 		jsonRpc: NewJsonRpcClient(rpcConf),
@@ -48,6 +54,12 @@ func NewBNB(rpcConf JsonRpcClientConfig) ethereumLike {
 
 // NewEthereumLike constructs a new ethereumLike CryptoProvider for generic EVM compatible
 // chains. For example Eth(base), BNB, Eth(eth).
+//
+// EthereumLike is dependent on the Ethereum JSON RPC, any EVM compatible chain which
+// still implements the ETH JsonRPC will work.
+//
+// All JsonRPCs for EthereumLike must support `personal_newAccount` and you MUST trust
+// the node/JsonRPC as the wallet is made on the node.
 //
 // Chain is the name of the chain, this must be unique.
 // Symbol is the pricing symbol, for example "ETH" for Eth(eth).
