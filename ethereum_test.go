@@ -5,6 +5,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"codeberg.org/lewdest/yuri/yuritest"
@@ -367,4 +368,109 @@ func TestEthereumPollPendingBalance(t *testing.T) {
 func bigInt(t *testing.T, v int64) *big.Int {
 	t.Helper()
 	return big.NewInt(v)
+}
+
+func TestEthereumCreateAddressAndPollERC721(t *testing.T) {
+	rpc, accounts := ethereumHelperCreateEnv(t)
+
+	provider := NewEthereum(JsonRpcClientConfig{
+		Host: rpc.conf.Host,
+	})
+
+	ctx := context.Background()
+
+	merchantAddr := accounts[0]
+	otherOwner := accounts[1]
+
+	collection := "0x5555555555555555555555555555555555555555"
+
+	// Minimal contract runtime implementing:
+	//
+	// ownerOf(uint256) -> address
+	//
+	// It ignores calldata and always returns the configured owner.
+	makeOwnerOfCode := func(addr string) string {
+		addr = strings.TrimPrefix(addr, "0x")
+
+		// PUSH20 <addr>
+		// PUSH1 00
+		// MSTORE
+		// PUSH1 20
+		// PUSH1 00
+		// RETURN
+		return "0x" +
+			"73" + addr +
+			"60" + "00" +
+			"52" +
+			"60" + "20" +
+			"60" + "00" +
+			"f3"
+	}
+
+	// NFT is initially owned by someone else.
+	if _, err := rpc.Do(ctx, JsonRpcRequest{
+		Method: "anvil_setCode",
+		Params: []any{
+			collection,
+			makeOwnerOfCode(otherOwner),
+		},
+	}); err != nil {
+		t.Fatalf("anvil_setCode(initial owner): %v", err)
+	}
+
+	nftIdentifier := NftIdentifier{
+		Collection: collection,
+		Asset:      "1",
+	}
+	invoice := Invoice{
+		Chain:      Ethereum,
+		Address:    merchantAddr,
+		AmountOwed: big.NewInt(1),
+		AmountPaid: big.NewInt(0),
+		Token:      nftIdentifier.Token(),
+	}
+
+	// before ownership transfer, merchant does not own NFT.
+	updates, err := provider.Poll(ctx, []Invoice{invoice})
+	if err != nil {
+		t.Fatalf("Poll(before transfer): %v", err)
+	}
+
+	if len(updates) != 0 {
+		t.Fatalf("expected no updates before NFT ownership transfer, got %d", len(updates))
+	}
+
+	// simulate transfer by changing ownerOf result.
+	if _, err := rpc.Do(ctx, JsonRpcRequest{
+		Method: "anvil_setCode",
+		Params: []any{
+			collection,
+			makeOwnerOfCode(merchantAddr),
+		},
+	}); err != nil {
+		t.Fatalf("anvil_setCode(new owner): %v", err)
+	}
+
+	updates, err = provider.Poll(ctx, []Invoice{invoice})
+	if err != nil {
+		t.Fatalf("Poll(after transfer): %v", err)
+	}
+
+	if len(updates) != 1 {
+		t.Fatalf("expected one updated invoice, got %d", len(updates))
+	}
+
+	updated := updates[0]
+
+	if got := updated.AmountPaid.String(); got != "1" {
+		t.Fatalf("AmountPaid = %s expected 1", got)
+	}
+
+	if updated.Pending {
+		t.Fatalf("expected NFT invoice not pending")
+	}
+
+	if !updated.Paid() {
+		t.Fatalf("expected NFT invoice paid")
+	}
 }
