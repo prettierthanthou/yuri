@@ -75,6 +75,14 @@ type NftIdentifier struct {
 	Asset string
 }
 
+func (n NftIdentifier) Token() Token {
+	return Token{
+		Symbol:   NftSymbol,
+		Contract: n.String(),
+		Decimals: 1,
+	}
+}
+
 func NftIdentifierFromString(contract string) (NftIdentifier, bool) {
 	split := strings.Split(contract, "|||")
 	if len(split) != 2 {
@@ -101,12 +109,8 @@ func (n NftIdentifier) String() string {
 // Where >=1 Paid means the NFT was recieved.
 func NFT(chain Chain, nftIdentifier NftIdentifier, metadata map[string]any) InvoiceCreate {
 	return InvoiceCreate{
-		Chain: chain,
-		Token: Token{
-			Symbol:   NftSymbol,
-			Contract: nftIdentifier.String(),
-			Decimals: 1,
-		},
+		Chain:    chain,
+		Token:    nftIdentifier.Token(),
 		Metadata: metadata,
 	}
 }
