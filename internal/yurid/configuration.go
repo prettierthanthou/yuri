@@ -36,7 +36,7 @@ var supportedChains = map[yuri.Chain]func(rpc yuri.JsonRpcClientConfig) yuri.Cry
 	yuri.Ethereum: func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewEthereum(rpc) },
 	yuri.BNB:      func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewBNB(rpc) },
 	yuri.Monero:   func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewMonero(rpc) },
-	// yuri.Solana:   func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewSolana(rpc) },
+	// NOTE: TON and SOL are not here as they require explicit handling
 }
 
 var supportedPricingProviders map[string]func(c *http.Client) yuri.PriceProvider = map[string]func(c *http.Client) yuri.PriceProvider{
@@ -210,9 +210,6 @@ func ParseConfig() (Configuration, error) {
 		}
 
 		hasSeenAtleast1ValidChainConf = true
-		// if chain != yuri.Solana {
-		// 	continue
-		// }
 
 		getHooks := func() (yuri.ProviderHooks, error) {
 			if cfg.walletOutDir == "" {
