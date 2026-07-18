@@ -60,7 +60,7 @@ type solanaProvider struct {
 
 // SupportsNFTs implements [CryptoProvider].
 func (s solanaProvider) SupportsNFTs() bool {
-	return false
+	return true
 }
 
 func (s solanaProvider) Chain() Chain {
