@@ -33,14 +33,9 @@ func solanaHelperCreateEnv(t *testing.T) (JsonRpcClient, yuritest.Container) {
 			"--bind-address", "0.0.0.0",
 			"--ledger", "/tmp/solana-ledger",
 		},
-		Port: "8899",
-		// Mounts: []testcontainers.ContainerMount{
-		// 	{
-		// 		Source: testcontainers.GenericBindMountSource{HostPath: t.TempDir()},
-		// 		Target: "/solana",
-		// 	},
-		// },
-		Wait: wait.ForListeningPort("8899/tcp"),
+		Port:   "8899",
+		Mounts: nil,
+		Wait:   wait.ForListeningPort("8899/tcp"),
 	})
 
 	return NewJsonRpcClient(JsonRpcClientConfig{

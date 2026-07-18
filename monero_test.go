@@ -3,15 +3,11 @@ package yuri
 import (
 	"context"
 	"math/big"
-	"os"
-	"path"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"codeberg.org/lewdest/yuri/yuritest"
-	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
@@ -22,11 +18,6 @@ const moneroTestImage = "melotools/monero:latest"
 // a testing rpc wallet automatically
 func moneroHelperCreateFullEnv(t *testing.T) (cModerod *yuritest.Container, cWalletd *yuritest.Container, cCustomerWalletD *yuritest.Container, walletJsonRpc, customerJsonRpc JsonRpcClient, daemonRPC JsonRpcClient) {
 	t.Helper()
-
-	wd, _ := os.Getwd()
-	moneroDir := path.Join(wd, ".monero")
-	dataDir, _ := filepath.Abs(path.Join(moneroDir, "data"))
-	walletDir, _ := filepath.Abs(path.Join(moneroDir, "wallet"))
 
 	env := yuritest.New(t)
 
@@ -45,14 +36,9 @@ func moneroHelperCreateFullEnv(t *testing.T) (cModerod *yuritest.Container, cWal
 			"--fixed-difficulty", "1",
 			"--non-interactive",
 		},
-		Port: "28081",
-		Mounts: []testcontainers.ContainerMount{
-			{
-				Source: testcontainers.GenericBindMountSource{HostPath: dataDir},
-				Target: "/monero",
-			},
-		},
-		Wait: wait.ForListeningPort("28081/tcp"),
+		Port:   "28081",
+		Mounts: nil,
+		Wait:   wait.ForListeningPort("28081/tcp"),
 	})
 
 	daemonRPC = NewJsonRpcClient(JsonRpcClientConfig{
@@ -76,14 +62,9 @@ func moneroHelperCreateFullEnv(t *testing.T) (cModerod *yuritest.Container, cWal
 				"--non-interactive",
 				"--log-level", "2",
 			},
-			Port: "28083",
-			Mounts: []testcontainers.ContainerMount{
-				{
-					Source: testcontainers.GenericBindMountSource{HostPath: walletDir},
-					Target: "/wallets",
-				},
-			},
-			Wait: wait.ForListeningPort("28083/tcp"),
+			Port:   "28083",
+			Mounts: nil,
+			Wait:   wait.ForListeningPort("28083/tcp"),
 		})
 
 		walletJsonRpc = NewJsonRpcClient(JsonRpcClientConfig{Host: cWalletd.HTTP() + "/json_rpc", NonB64BasicAuth: true})

@@ -3,13 +3,10 @@ package yuri
 import (
 	"context"
 	"math/big"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"codeberg.org/lewdest/yuri/yuritest"
-	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
@@ -19,9 +16,6 @@ const anvilTestImage = "ghcr.io/foundry-rs/foundry:stable"
 
 func ethereumHelperCreateEnv(t *testing.T) (JsonRpcClient, []string) {
 	t.Helper()
-
-	wd, _ := os.Getwd()
-	dataDir := filepath.Join(wd, ".eth")
 
 	env := yuritest.New(t)
 	cNode := env.Run(yuritest.Spec{
@@ -33,14 +27,9 @@ func ethereumHelperCreateEnv(t *testing.T) (JsonRpcClient, []string) {
 			"--port", "8545",
 			"--silent",
 		},
-		Port: "8545",
-		Mounts: []testcontainers.ContainerMount{
-			{
-				Source: testcontainers.GenericBindMountSource{HostPath: dataDir},
-				Target: "/eth",
-			},
-		},
-		Wait: wait.ForListeningPort("8545/tcp"),
+		Port:   "8545",
+		Mounts: nil,
+		Wait:   wait.ForListeningPort("8545/tcp"),
 	})
 
 	rpc := NewJsonRpcClient(JsonRpcClientConfig{
