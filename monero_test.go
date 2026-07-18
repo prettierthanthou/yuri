@@ -11,8 +11,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-// TODO: pin
-const moneroTestImage = "melotools/monero:latest"
+const moneroTestImage = "melotools/monero@sha256:7fc3357602845fa2e35e1ac25fd0f035f4c72da188a7c9ef76a6cf3203d0bb57"
 
 // moneroHelperCreateFullEnv starts monerod and monero-wallet-rpc, and creates
 // a testing rpc wallet automatically

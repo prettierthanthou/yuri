@@ -10,9 +10,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-// TODO: WAHHHHHHHH PINNING MAKES IT FAIL I DONT CAREEEEE
-// GET FUCKED BY THE SUPPLY CHAIN WAHHHHHHHHHHHHHHHHHHHHH
-const anvilTestImage = "ghcr.io/foundry-rs/foundry:stable"
+const anvilTestImage = "ghcr.io/foundry-rs/foundry@sha256:043752653d5be351c71709091b3db97c4421c907eb40ea294195e7f532aadf46"
 
 func ethereumHelperCreateEnv(t *testing.T) (JsonRpcClient, []string) {
 	t.Helper()

@@ -15,7 +15,8 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-const solanaImage = "solanalabs/solana:v1.18.26"
+// v1.18.26
+const solanaImage = "solanalabs/solana@sha256:098806e64d44bccdbedbf07c2edabd1c850b92c8a4a0f81eba9c789034813db6"
 
 func solanaHelperCreateEnv(t *testing.T) (JsonRpcClient, yuritest.Container) {
 	t.Helper()

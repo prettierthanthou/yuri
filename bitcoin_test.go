@@ -10,7 +10,8 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-const bitcoinTestImage = "bitcoin/bitcoin:31.0"
+// v31.0
+const bitcoinTestImage = "bitcoin/bitcoin@sha256:a1d05be6939b5c85132a761d2b795f5b8a2612ce53782263da4939778e461792"
 
 func bitcoinHelperCreateEnv(t *testing.T) JsonRpcClient {
 	t.Helper()
