@@ -323,8 +323,6 @@ spl-token transfer \
 		t.Fatal(err)
 	}
 
-	// TODO: refactoring to determine a better way.. the funds aren't confirmed
-	// yet nor finalized. and i quite frankly hate the hacky shit above.
 	if !invoicesPoll2[0].Paid() {
 		t.Fatalf("invoice should be paid. inv %+v", invoicesPoll2[0])
 	}

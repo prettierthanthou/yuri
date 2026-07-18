@@ -33,18 +33,6 @@ func TestEnv_New_CreatesNetwork(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected network to exist: %v", err)
 	}
-
-	// TODO: determine a better way to properly test this, but for now
-	// the cleanup does in fact work.
-	// t.Cleanup(func() {
-	// 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	// 	defer cancel()
-
-	// 	_, err := cli.NetworkInspect(ctx, env.nw.Name, client.NetworkInspectOptions{})
-	// 	if err == nil {
-	// 		t.Fatalf("expected network to be removed after cleanup")
-	// 	}
-	// })
 }
 
 func TestEnv_Run_CreatesContainer(t *testing.T) {
@@ -137,38 +125,3 @@ func TestEnv_MultipleContainers_SameNetwork(t *testing.T) {
 		}
 	}
 }
-
-// TODO: determine a better way to properly test this, but for now
-// the cleanup does in fact work.
-
-// func TestEnv_Run_CleanupRemovesContainers(t *testing.T) {
-// 	env := New(t)
-
-// 	c := env.Run(Spec{
-// 		Name:  "cleanup-final",
-// 		Image: "nginx:alpine",
-// 		Port:  "80/tcp",
-// 		Wait:  wait.ForHTTP("/").WithStartupTimeout(15 * time.Second),
-// 	})
-
-// 	id := c.id()
-// 	cli, err := client.New(client.FromEnv)
-// 	if err != nil {
-// 		t.Fatalf("docker client init failed: %v", err)
-// 	}
-
-// 	if _, err := cli.ContainerInspect(context.Background(), id, client.ContainerInspectOptions{}); err != nil {
-// 		t.Fatalf("container should exist at runtime: %v", err)
-// 	}
-
-// 	t.Cleanup(func() {
-// 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-// 		defer cancel()
-
-// 		_, err := cli.ContainerInspect(ctx, id, client.ContainerInspectOptions{})
-// 		if err == nil {
-// 			// t.Logf("TestEnv_Run_CleanupRemovesContainers = %q", err)
-// 			t.Fatalf("expected container to be removed after cleanup")
-// 		}
-// 	})
-// }
