@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/binary"
+	"fmt"
 	"math/big"
 
 	"codeberg.org/lewdest/yuri/internal/solana"
@@ -28,11 +29,20 @@ type SolanaOptions struct {
 // TODO: maybe stop people from being dumb and assuming
 // that they don't have to pass in the hooks. something like that.
 // but until this is v1000.00.05 i don't care! RTFM!
+
+// NewSolana creates a [solanaProvider] that can handle Lamports/SPLs.
+// NOTE: While Solana DOES have NFT support it is strictly just SPL NFTs (and maybe pNFT but this is untested!).
+// There is no support for cNFTs, or Token2022 NFTs.
 func NewSolana(opts SolanaOptions) solanaProvider {
+	latestStage := "finalized"
+	if opts.isTest {
+		latestStage = "confirmed"
+	}
+
 	return solanaProvider{
-		jsonRpc: NewJsonRpcClient(opts.Rpc),
-		hooks:   opts.Hooks,
-		isTest:  opts.isTest,
+		jsonRpc:     NewJsonRpcClient(opts.Rpc),
+		hooks:       opts.Hooks,
+		latestStage: latestStage,
 	}
 }
 
@@ -40,9 +50,12 @@ var _ CryptoProvider = solanaProvider{}
 var _ PricingSymbolProvider = solanaProvider{}
 
 type solanaProvider struct {
+	// latestStage is used in testing to allow for
+	// treating "confirmed" as good enough.
+	latestStage string
+
 	jsonRpc JsonRpcClient
 	hooks   ProviderHooks
-	isTest  bool
 }
 
 // SupportsNFTs implements [CryptoProvider].
@@ -91,32 +104,45 @@ func (s solanaProvider) Poll(ctx context.Context, invoices []Invoice) ([]Invoice
 
 		ataAddrs []string
 		ataKeys  []string
+
+		nftAddrs []string
+		nftKeys  []string
 	)
 
 	for _, inv := range invoices {
-		if inv.Token == (Token{}) {
+		switch {
+		case inv.Token == (Token{}):
 			solAddrs = append(solAddrs, inv.Address)
 			solKeys = append(solKeys, inv.Address)
-			continue
-		}
 
-		ata, err := solana.AssociatedTokenAddress(inv.Address, inv.Token.Contract)
-		if err != nil {
-			return nil, err
-		}
+		case inv.Token.Symbol == NftSymbol:
+			id, ok := NftIdentifierFromString(inv.Token.Contract)
+			if !ok {
+				return nil, fmt.Errorf("invalid NFT identifier")
+			}
 
-		ataAddrs = append(ataAddrs, ata)
-		ataKeys = append(ataKeys, tokenBalanceKey(inv.Address, inv.Token))
+			ata, err := solana.AssociatedTokenAddress(inv.Address, id.Asset)
+			if err != nil {
+				return nil, err
+			}
+
+			nftAddrs = append(nftAddrs, ata)
+			nftKeys = append(nftKeys, tokenBalanceKey(inv.Address, inv.Token))
+
+		default:
+			ata, err := solana.AssociatedTokenAddress(inv.Address, inv.Token.Contract)
+			if err != nil {
+				return nil, err
+			}
+
+			ataAddrs = append(ataAddrs, ata)
+			ataKeys = append(ataKeys, tokenBalanceKey(inv.Address, inv.Token))
+		}
 	}
 
 	// lamports
 	if len(solAddrs) > 0 {
-		latestStage := "finalized"
-		if s.isTest {
-			latestStage = "confirmed"
-		}
-
-		latest, err := s.rpcMultipleAccounts(ctx, solAddrs, latestStage)
+		latest, err := s.rpcMultipleAccounts(ctx, solAddrs, s.latestStage)
 		if err != nil {
 			return nil, err
 		}
@@ -136,7 +162,7 @@ func (s solanaProvider) Poll(ctx context.Context, invoices []Invoice) ([]Invoice
 
 	// ata/tokens
 	if len(ataAddrs) > 0 {
-		latest, err := s.rpcMultipleTokenAccounts(ctx, ataAddrs, "finalized")
+		latest, err := s.rpcMultipleTokenAccounts(ctx, ataAddrs, s.latestStage)
 		if err != nil {
 			return nil, err
 		}
@@ -148,6 +174,26 @@ func (s solanaProvider) Poll(ctx context.Context, invoices []Invoice) ([]Invoice
 
 		for i := range ataKeys {
 			balances[ataKeys[i]] = &balanceBalance{
+				latest:  latest[i],
+				pending: pending[i],
+			}
+		}
+	}
+
+	// nft ATAs
+	if len(nftAddrs) > 0 {
+		latest, err := s.rpcMultipleTokenAccounts(ctx, nftAddrs, s.latestStage)
+		if err != nil {
+			return nil, err
+		}
+
+		pending, err := s.rpcMultipleTokenAccounts(ctx, nftAddrs, "processed")
+		if err != nil {
+			return nil, err
+		}
+
+		for i := range nftKeys {
+			balances[nftKeys[i]] = &balanceBalance{
 				latest:  latest[i],
 				pending: pending[i],
 			}
