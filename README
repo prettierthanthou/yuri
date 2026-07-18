@@ -5,12 +5,12 @@ simple, sweet, and quick library/daemon for handling cryptocurrency payments in 
 NOTE: this is extremely experimental
 
 currently supports:
-[x] Ethereum (+ERC20)
+[x] Ethereum (+ERC20+ERC721)
 [x] Litecoin
 [x] Bitcoin
 [x] Monero
-[x] Solana (+tokens)
-[X] Ton
+[x] Solana (+tokens+SPL NFTs)
+[X] Ton (+NFTs)
 
 licensed under the [AGPLv3](./LICENSE)
 examples [here](./example_instance_test.go) or on `go doc`
