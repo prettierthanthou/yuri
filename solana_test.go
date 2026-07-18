@@ -33,14 +33,9 @@ func solanaHelperCreateEnv(t *testing.T) (JsonRpcClient, yuritest.Container) {
 			"--bind-address", "0.0.0.0",
 			"--ledger", "/tmp/solana-ledger",
 		},
-		Port: "8899",
-		// Mounts: []testcontainers.ContainerMount{
-		// 	{
-		// 		Source: testcontainers.GenericBindMountSource{HostPath: t.TempDir()},
-		// 		Target: "/solana",
-		// 	},
-		// },
-		Wait: wait.ForListeningPort("8899/tcp"),
+		Port:   "8899",
+		Mounts: nil,
+		Wait:   wait.ForListeningPort("8899/tcp"),
 	})
 
 	return NewJsonRpcClient(JsonRpcClientConfig{
@@ -330,11 +325,123 @@ spl-token transfer \
 
 	// TODO: refactoring to determine a better way.. the funds aren't confirmed
 	// yet nor finalized. and i quite frankly hate the hacky shit above.
-	// if !invoices[0].Paid() {
-	// 	t.Fatalf("invoice should be paid. inv %+v", invoices[0])
-	// }
+	if !invoicesPoll2[0].Paid() {
+		t.Fatalf("invoice should be paid. inv %+v", invoicesPoll2[0])
+	}
 
 	if invoicesPoll2[0].AmountPaid.Cmp(big.NewInt(100_000_000_000)) != 0 {
 		t.Fatalf("AmountPaid=%v", invoicesPoll2[0].AmountPaid)
+	}
+}
+
+func TestSolanaNFTPoll(t *testing.T) {
+	ctx := context.Background()
+
+	sol, container := solanaHelperCreateEnv(t)
+
+	out, err := container.Exec(ctx, []string{
+		"bash", "-lc",
+		fmt.Sprintf(`
+set -e
+
+export HOME=/tmp/solana
+mkdir -p "$HOME"
+
+KEYPAIR=$HOME/payer.json
+
+solana config set --url %s
+
+solana-keygen new --no-bip39-passphrase -o "$KEYPAIR" --force
+solana config set --keypair "$KEYPAIR"
+
+solana airdrop 100
+
+NFT_MINT=$(spl-token create-token --decimals 0 | awk '/Creating token/{print $3}')
+NFT_ATA=$(spl-token create-account "$NFT_MINT" | awk '/Creating account/{print $3}')
+
+spl-token mint "$NFT_MINT" 1 "$NFT_ATA"
+
+echo "NFT_MINT=$NFT_MINT"
+`, container.UnmappedHTTP()),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var nftMint string
+
+	for _, line := range strings.Split(out, "\n") {
+		if idx := strings.Index(line, "NFT_MINT="); idx >= 0 {
+			nftMint = strings.TrimSpace(line[idx+len("NFT_MINT="):])
+		}
+	}
+
+	if nftMint == "" {
+		t.Fatalf("failed to create NFT:\n%s", out)
+	}
+
+	chain := NewSolana(SolanaOptions{
+		isTest: true,
+		Rpc:    sol.conf,
+	})
+
+	addr, err := chain.CreateAddress(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	invoice := Invoice{
+		Chain:   Solana,
+		Address: addr,
+		Token: NftIdentifier{
+			Collection: "ignored-for-now",
+			Asset:      nftMint,
+		}.Token(),
+		AmountOwed: big.NewInt(1),
+		AmountPaid: big.NewInt(0),
+	}
+
+	initial, err := chain.Poll(ctx, []Invoice{invoice})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(initial) != 0 {
+		t.Fatalf("Poll(1) should return no changed invoices")
+	}
+
+	_, err = container.Exec(ctx, []string{
+		"bash", "-lc",
+		fmt.Sprintf(`
+set -e
+
+export HOME=/tmp/solana
+KEYPAIR=$HOME/payer.json
+
+solana config set --url %s
+solana config set --keypair "$KEYPAIR"
+
+spl-token transfer \
+    %s \
+    1 \
+    %s \
+    --fund-recipient \
+    --allow-unfunded-recipient
+`, container.UnmappedHTTP(), nftMint, addr),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	changed := pollUntil(t, ctx, chain, invoice, func(inv *Invoice) bool {
+		return inv.AmountPaid.Cmp(big.NewInt(1)) == 0
+	})
+
+	if !changed.Paid() {
+		t.Fatal("expected NFT invoice to be paid")
+	}
+
+	if changed.AmountPaid.Cmp(big.NewInt(1)) != 0 {
+		t.Fatalf("AmountPaid=%v", changed.AmountPaid)
 	}
 }

@@ -35,6 +35,11 @@ type bitcoinLike struct {
 	chain   Chain
 }
 
+// SupportsNFTs implements [CryptoProvider].
+func (b bitcoinLike) SupportsNFTs() bool {
+	return false
+}
+
 // Chain implements [CryptoProvider].
 func (b bitcoinLike) Chain() Chain {
 	return b.chain

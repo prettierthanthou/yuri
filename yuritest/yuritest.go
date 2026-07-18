@@ -83,7 +83,7 @@ func New(t *testing.T) *Env {
 func (e *Env) Run(spec Spec) *Container {
 	e.t.Helper()
 
-	containerName := fmt.Sprintf("yuri-%s", spec.Name)
+	containerName := fmt.Sprintf("yuri-%s-%d", spec.Name, time.Now().UnixNano())
 	e.t.Logf("creating %s container", containerName)
 	req := testcontainers.ContainerRequest{
 		Name:         containerName,
@@ -95,6 +95,9 @@ func (e *Env) Run(spec Spec) *Container {
 		Networks:     []string{e.nw.Name},
 		Mounts:       spec.Mounts,
 		WaitingFor:   spec.Wait,
+		NetworkAliases: map[string][]string{
+			e.nw.Name: {containerName},
+		},
 	}
 
 	c, err := testcontainers.GenericContainer(e.ctx, testcontainers.GenericContainerRequest{
@@ -184,4 +187,8 @@ func (c *Container) Exec(ctx context.Context, cmd []string, opts ...tcexec.Proce
 	}
 
 	return string(out), nil
+}
+
+func (c *Container) ContainerIP(ctx context.Context) (string, error) {
+	return c.c.ContainerIP(ctx)
 }

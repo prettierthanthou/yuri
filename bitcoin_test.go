@@ -3,14 +3,10 @@ package yuri
 import (
 	"context"
 	"math/big"
-	"os"
-	"path"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"codeberg.org/lewdest/yuri/yuritest"
-	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
@@ -19,36 +15,28 @@ const bitcoinTestImage = "bitcoin/bitcoin:31.0"
 func bitcoinHelperCreateEnv(t *testing.T) JsonRpcClient {
 	t.Helper()
 
-	wd, _ := os.Getwd()
-	bitcoinDir := path.Join(wd, ".bitcoin")
-	dataDir, _ := filepath.Abs(path.Join(bitcoinDir, "data"))
-
 	const rpcPassword = "qDDZdeQ5vw9XXFeVnXT4PZ--tGN2xNjjR4nrtyszZx0="
-	const rpcAuth = "foo:7d9ba5ae63c3d4dc30583ff4fe65a67e$9e3634e81c11659e3de036d0bf88f89cd169c1039e6e09607562d54765c649cc"
+	const rpcAuth = "foo:a4fac06a16f36205d85b0bfb5bc31453\\$4790ce7f355ee672b9d5edaea54c9b2af3545efe97c0206afd8c778119486458"
 
 	env := yuritest.New(t)
 	cNode := env.Run(yuritest.Spec{
 		Name:       t.Name() + "-bitcoind",
 		Image:      bitcoinTestImage,
-		Entrypoint: []string{"bitcoind"},
+		Entrypoint: []string{"sh", "-c"},
 		Cmd: []string{
-			"-regtest=1",
-			"-printtoconsole",
-			"-rpcport=18443",
-			"-rpcbind=0.0.0.0",
-			"-rpcallowip=0.0.0.0/0",
-			"-rpcauth=" + rpcAuth,
-			"-fallbackfee=0.0002",
-			"-datadir=/bitcoin",
+			"mkdir -p /bitcoin && exec bitcoind " +
+				"-regtest=1 " +
+				"-printtoconsole " +
+				"-rpcport=18443 " +
+				"-rpcbind=0.0.0.0 " +
+				"-rpcallowip=0.0.0.0/0 " +
+				"-rpcauth=" + rpcAuth + " " +
+				"-fallbackfee=0.0002 " +
+				"-datadir=/bitcoin",
 		},
-		Port: "18443",
-		Mounts: []testcontainers.ContainerMount{
-			{
-				Source: testcontainers.GenericBindMountSource{HostPath: dataDir},
-				Target: "/bitcoin",
-			},
-		},
-		Wait: wait.ForListeningPort("18443/tcp"),
+		Port:   "18443",
+		Mounts: nil,
+		Wait:   wait.ForLog("Done loading"),
 	})
 
 	rpc := NewJsonRpcClient(JsonRpcClientConfig{
@@ -155,6 +143,8 @@ func TestBitcoinCreateAddress(t *testing.T) {
 	if addr == "" {
 		t.Fatalf("expected non-empty address")
 	}
+
+	t.Logf("BitcoinCreateAddress addr: %s", addr)
 }
 
 func TestBitcoinPoll(t *testing.T) {

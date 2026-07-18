@@ -3,6 +3,8 @@ package yuri
 import (
 	"context"
 	"crypto"
+	"fmt"
+	"strings"
 )
 
 // Chain is the full name of the chain in lowercase. (e.g. monero)
@@ -36,6 +38,9 @@ type CryptoProvider interface {
 	//
 	// Please see [Invoice]'s documentation for the expcted semantics of [Invoice.AmountPaid] and [Invoice.Pending]
 	Poll(context.Context, []Invoice) ([]Invoice, error)
+
+	// SupportsNFTs indicates if this specific [CryptoProvider] supports [NFT]
+	SupportsNFTs() bool
 }
 
 // InvoicePollChanged is a small utility to determine if two Invoices are equal for polling.
@@ -49,6 +54,66 @@ func InvoicePollChanged(old, updated Invoice) bool {
 // This is optional and exists so pricing providers can avoid hardcoded symbol maps.
 type PricingSymbolProvider interface {
 	PriceSymbol() string
+}
+
+// NftSymbol is used as a [Token.Symbol] to indicate
+// that a specific [Token] is an NFT and should be
+// handled differently than a typical Token.
+const NftSymbol = "__YURI_NFT__"
+
+type NftIdentifier struct {
+	// Chain-specific collection identifier.
+	// Ethereum: contract address
+	// Solana: collection mint
+	// Bitcoin Ordinals: inscription collection, etc.
+	Collection string
+
+	// Chain-specific asset identifier.
+	// Ethereum ERC-721: token ID
+	// Solana: mint address
+	// Bitcoin Ordinals: inscription ID
+	// TON: NFT item index
+	Asset string
+}
+
+func (n NftIdentifier) Token() Token {
+	return Token{
+		Symbol:   NftSymbol,
+		Contract: n.String(),
+		Decimals: 1,
+	}
+}
+
+func NftIdentifierFromString(contract string) (NftIdentifier, bool) {
+	split := strings.Split(contract, "|||")
+	if len(split) != 2 {
+		return NftIdentifier{}, false
+	}
+
+	return NftIdentifier{
+		Collection: split[0],
+		Asset:      split[1],
+	}, true
+}
+
+func (n NftIdentifier) String() string {
+	return fmt.Sprintf("%s|||%s", n.Collection, n.Asset)
+}
+
+// NFT is a wrapper around [Invoice] and [Token] to indicate that
+// a specified Token is in fact an NFT on a specific chain.
+//
+// [nftIdentifier] is either the smart contract, or other form
+// of identifying an NFT on the wanted chain.
+//
+// NFTs are always the following: AmountOwed = 1, AmountPaid = 0.
+// Where >=1 Paid means the NFT was recieved.
+func NFT(chain Chain, nftIdentifier NftIdentifier, metadata map[string]any) InvoiceCreate {
+	return InvoiceCreate{
+		Chain:    chain,
+		Token:    nftIdentifier.Token(),
+		Metadata: metadata,
+	}
 }
 
 // Token represents a smart contract on a respective chain

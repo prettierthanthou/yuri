@@ -77,6 +77,11 @@ type ethereumLike struct {
 	symbol  string
 }
 
+// SupportsNFTs implements [CryptoProvider].
+func (e ethereumLike) SupportsNFTs() bool {
+	return false
+}
+
 // Chain implements [CryptoProvider].
 func (e ethereumLike) Chain() Chain {
 	return e.chain
@@ -125,6 +130,20 @@ func (e ethereumLike) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, 
 		}
 
 		inv := invoices[i]
+		if inv.Token != (Token{}) && inv.Token.Symbol == NftSymbol {
+			latest, pending, err := e.erc721Ownership(ctx, inv.Address, inv.Token)
+			if err != nil {
+				return nil, err
+			}
+
+			key := tokenBalanceKey(inv.Address, inv.Token)
+			balances[key] = &balanceBalance{
+				latest:  latest,
+				pending: pending,
+			}
+			continue
+		}
+
 		if inv.Token == (Token{}) {
 			latest, pending, err := e.nativeBalance(ctx, inv.Address)
 			if err != nil {
@@ -185,6 +204,62 @@ func (e ethereumLike) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, 
 
 func tokenBalanceKey(addr string, token Token) string {
 	return strings.ToLower(addr) + "|" + strings.ToLower(token.Contract)
+}
+
+func (e ethereumLike) erc721Ownership(ctx context.Context, addr string, token Token) (*big.Int, *big.Int, error) {
+	nftIdentifier, ok := NftIdentifierFromString(token.Contract)
+	if !ok {
+		return nil, nil, fmt.Errorf("failed to parse contract (%s) into NftIdentifier", token.Contract)
+	}
+
+	latest, err := e.rpcERC721Ownership(ctx, addr, nftIdentifier, "latest")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	pending, err := e.rpcERC721Ownership(ctx, addr, nftIdentifier, "pending")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return latest, pending, nil
+}
+
+func (e ethereumLike) rpcERC721Ownership(ctx context.Context, addr string, nftIdentifer NftIdentifier, tag string) (*big.Int, error) {
+	tokenID, ok := new(big.Int).SetString(nftIdentifer.Asset, 10)
+	if !ok {
+		return nil, fmt.Errorf("invalid token ID %q", nftIdentifer.Asset)
+	}
+
+	call := map[string]any{
+		"to":   nftIdentifer.Collection,
+		"data": erc721OwnerOfData(tokenID),
+	}
+
+	var raw string
+	if err := RPCDo(ctx, e.jsonRpc, JsonRpcRequest{
+		Method: "eth_call",
+		Params: []any{call, tag},
+	}, &raw); err != nil {
+		return big.NewInt(0), nil
+	}
+
+	raw = strings.TrimPrefix(strings.TrimSpace(raw), "0x")
+	if len(raw) != 64 {
+		return nil, fmt.Errorf("invalid ownerOf response %q", raw)
+	}
+
+	owner := "0x" + raw[24:]
+	if strings.EqualFold(owner, addr) {
+		return big.NewInt(1), nil
+	}
+
+	return big.NewInt(0), nil
+}
+
+func erc721OwnerOfData(tokenID *big.Int) string {
+	id := fmt.Sprintf("%064x", tokenID)
+	return "0x6352211e" + id
 }
 
 func (e ethereumLike) nativeBalance(ctx context.Context, addr string) (*big.Int, *big.Int, error) {

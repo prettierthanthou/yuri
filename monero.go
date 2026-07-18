@@ -30,6 +30,11 @@ type monero struct {
 	jsonRpc JsonRpcClient
 }
 
+// SupportsNFTs implements [CryptoProvider].
+func (m monero) SupportsNFTs() bool {
+	return false
+}
+
 // Poll implements [CryptoProvider].
 func (m monero) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, error) {
 	type subaddr struct {
