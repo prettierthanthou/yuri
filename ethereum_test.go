@@ -60,6 +60,39 @@ func TestEthereumChainAndDecimals(t *testing.T) {
 	}
 }
 
+func TestEthereumBNBChainAndSymbol(t *testing.T) {
+	bnb := NewBNB(JsonRpcClientConfig{})
+
+	if bnb.chain != BNB {
+		t.Fatalf("BNB expected chain = %s got %s", BNB, bnb.chain)
+	}
+
+	if bnb.symbol != "BNB" {
+		t.Fatalf("BNB expected chain = %s got %s", "BNB", bnb.chain)
+	}
+}
+
+func TestEthereumLikeChainAndSymbol(t *testing.T) {
+	const chain, symbol = "cool-chain", "chainsymbol"
+	ethLike := NewEthereumLike(chain, symbol, JsonRpcClientConfig{})
+
+	if ethLike.chain != chain {
+		t.Fatalf("BNB expected chain = %s got %s", chain, ethLike.chain)
+	}
+
+	if ethLike.symbol != symbol {
+		t.Fatalf("BNB expected chain = %s got %s", symbol, ethLike.symbol)
+	}
+}
+
+func TestEthereumSupportsNFTs(t *testing.T) {
+	eth := NewEthereum(JsonRpcClientConfig{})
+
+	if !eth.SupportsNFTs() {
+		t.Fatalf("Ethereum SupportsNFTs expected = true got = %+v", eth.SupportsNFTs())
+	}
+}
+
 func TestEthereumCreateAddressAndPoll(t *testing.T) {
 	rpc, accounts := ethereumHelperCreateEnv(t)
 

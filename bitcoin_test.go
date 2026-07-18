@@ -94,6 +94,35 @@ func bitcoinHelperCreateWallet(t *testing.T, base JsonRpcClient, walletName stri
 	})
 }
 
+func TestBitcoinDoesntSupportNFTs(t *testing.T) {
+	btc := NewBitcoin(JsonRpcClientConfig{})
+	if btc.SupportsNFTs() {
+		t.Fatal("Bitcoin should not support NFTs")
+	}
+}
+
+func TestBitcoinLikeForBTCPriceSymbol(t *testing.T) {
+	btc := NewBitcoin(JsonRpcClientConfig{})
+	if btc.PriceSymbol() != "BTC" {
+		t.Fatalf("Bitcoin PriceSymbol expected = BTC got = %s", btc.PriceSymbol())
+	}
+}
+
+func TestBitcoinLikeForLTCPriceSymbol(t *testing.T) {
+	LTC := NewLitecoin(JsonRpcClientConfig{})
+	if LTC.PriceSymbol() != "LTC" {
+		t.Fatalf("Bitcoin PriceSymbol expected = LTC got = %s", LTC.PriceSymbol())
+	}
+}
+
+func TestBitcoinLikePriceSymbolForRandom(t *testing.T) {
+	const symbol = "random"
+	random := bitcoinLike{chain: Chain(symbol)}
+	if random.PriceSymbol() != symbol {
+		t.Fatalf("Bitcoin PriceSymbol expected = %s got = %s", symbol, random.PriceSymbol())
+	}
+}
+
 func bitcoinMineBlocks(t *testing.T, rpc JsonRpcClient, addr string, n int) {
 	t.Helper()
 

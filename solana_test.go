@@ -55,6 +55,22 @@ func TestSolanaChainAndDecimals(t *testing.T) {
 	}
 }
 
+func TestSolanaSupportsNFTs(t *testing.T) {
+	s := NewSolana(SolanaOptions{})
+
+	if !s.SupportsNFTs() {
+		t.Fatalf("expected Solana SupportsNFTs to be truthy")
+	}
+}
+
+func TestSolanaPriceSymbol(t *testing.T) {
+	s := NewSolana(SolanaOptions{})
+
+	if s.PriceSymbol() != "SOL" {
+		t.Fatalf("Solana PriceSymbol expected = SOL got = %s", s.PriceSymbol())
+	}
+}
+
 func pollUntil(t *testing.T, ctx context.Context, provider CryptoProvider, invoice Invoice, cond func(*Invoice) bool) Invoice {
 	t.Helper()
 
