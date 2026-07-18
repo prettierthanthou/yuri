@@ -72,6 +72,7 @@ type NftIdentifier struct {
 	// Ethereum ERC-721: token ID
 	// Solana: mint address
 	// Bitcoin Ordinals: inscription ID
+	// TON: NFT item index
 	Asset string
 }
 

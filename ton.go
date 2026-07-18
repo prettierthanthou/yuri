@@ -10,6 +10,7 @@ import (
 	"github.com/xssnick/tonutils-go/liteclient"
 	"github.com/xssnick/tonutils-go/ton"
 	"github.com/xssnick/tonutils-go/ton/jetton"
+	"github.com/xssnick/tonutils-go/ton/nft"
 	"github.com/xssnick/tonutils-go/ton/wallet"
 )
 
@@ -28,7 +29,10 @@ type chainClient interface {
 	CurrentBlock(ctx context.Context) (*chainBlock, error)
 	NativeBalance(ctx context.Context, block *chainBlock, addr string) (*big.Int, error)
 	JettonBalance(ctx context.Context, block *chainBlock, addr string, contract string) (*big.Int, error)
+	NFTOwner(ctx context.Context, block *chainBlock, collection string, asset string) (string, error)
 }
+
+var _ chainClient = &tonChainClient{}
 
 type tonChainClient struct {
 	api *ton.APIClient
@@ -106,6 +110,50 @@ func (c *tonChainClient) JettonBalance(
 	return new(big.Int).Set(balance), nil
 }
 
+func (c *tonChainClient) NFTOwner(
+	ctx context.Context,
+	block *chainBlock,
+	collection string,
+	asset string,
+) (string, error) {
+	collectionAddr, err := address.ParseAddr(collection)
+	if err != nil {
+		return "", err
+	}
+
+	index, ok := new(big.Int).SetString(asset, 10)
+	if !ok {
+		return "", fmt.Errorf("invalid TON NFT index %s", asset)
+	}
+
+	collectionClient :=
+		nft.NewCollectionClient(c.api, collectionAddr)
+
+	itemAddr, err :=
+		collectionClient.GetNFTAddressByIndexAtBlock(
+			ctx,
+			index,
+			block.inner,
+		)
+	if err != nil {
+		return "", err
+	}
+
+	itemClient :=
+		nft.NewItemClient(c.api, itemAddr)
+
+	data, err :=
+		itemClient.GetNFTDataAtBlock(
+			ctx,
+			block.inner,
+		)
+	if err != nil {
+		return "", err
+	}
+
+	return data.OwnerAddress.String(), nil
+}
+
 type TonOptions struct {
 	ConfigUrl string
 	Client    chainClient
@@ -151,7 +199,7 @@ type tonProvider struct {
 
 // SupportsNFTs implements [CryptoProvider].
 func (t tonProvider) SupportsNFTs() bool {
-	return false
+	return true
 }
 
 // PriceSymbol implements [PricingSymbolProvider].
@@ -186,16 +234,50 @@ func (t tonProvider) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, e
 	for _, inv := range invoices {
 		updated := inv.Clone()
 
-		if updated.Token == (Token{}) {
-			updated.AmountPaid, err = t.api.NativeBalance(ctx, block, updated.Address)
-		} else {
-			updated.AmountPaid, err = t.api.JettonBalance(
-				ctx,
-				block,
-				updated.Address,
-				updated.Token.Contract,
-			)
+		switch {
+		case updated.Token == (Token{}):
+			updated.AmountPaid, err =
+				t.api.NativeBalance(
+					ctx,
+					block,
+					updated.Address,
+				)
+
+		case updated.Token.Symbol == NftSymbol:
+			nft, ok :=
+				NftIdentifierFromString(updated.Token.Contract)
+
+			if !ok {
+				return nil, fmt.Errorf(
+					"invalid nft identifier %s",
+					updated.Token.Contract,
+				)
+			}
+
+			owner, err :=
+				t.api.NFTOwner(
+					ctx,
+					block,
+					nft.Collection,
+					nft.Asset,
+				)
+
+			if err == nil && owner == updated.Address {
+				updated.AmountPaid = big.NewInt(1)
+			} else {
+				updated.AmountPaid = big.NewInt(0)
+			}
+
+		default:
+			updated.AmountPaid, err =
+				t.api.JettonBalance(
+					ctx,
+					block,
+					updated.Address,
+					updated.Token.Contract,
+				)
 		}
+
 		if err != nil {
 			return nil, err
 		}

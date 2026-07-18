@@ -7,10 +7,7 @@ import (
 )
 
 func TestTonChainAndDecimals(t *testing.T) {
-	p := NewTon(TonOptions{
-		Client: nil,
-		Hooks:  ProviderHooks{},
-	})
+	p := tonProvider{api: nil, hooks: ProviderHooks{}}
 
 	if p.Chain() != Ton {
 		t.Fatal("expected TON chain")
@@ -21,6 +18,8 @@ func TestTonChainAndDecimals(t *testing.T) {
 	}
 }
 
+var _ chainClient = &fakeChainClient{}
+
 type fakeChainClient struct {
 	address string
 	block   *chainBlock
@@ -28,7 +27,19 @@ type fakeChainClient struct {
 	native *big.Int
 	jetton *big.Int
 
+	nftOwner string
+
 	err error
+}
+
+// NFTOwner implements [chainClient].
+func (f *fakeChainClient) NFTOwner(
+	context.Context,
+	*chainBlock,
+	string,
+	string,
+) (string, error) {
+	return f.nftOwner, f.err
 }
 
 func (f *fakeChainClient) CreateAddress(context.Context, ProviderHooks) (string, error) {
@@ -84,7 +95,7 @@ func TestTonProviderPollNativeBalanceChanged(t *testing.T) {
 
 	invoice := Invoice{
 		Address:    "addr",
-		Pending:    true,
+		Pending:    false,
 		AmountPaid: big.NewInt(0),
 		AmountOwed: big.NewInt(10),
 		Chain:      Ton,
@@ -108,7 +119,7 @@ func TestTonProviderPollNativeBalanceChanged(t *testing.T) {
 		t.Fatalf("pending = %v expected = false", updatedInv.Pending)
 	}
 
-	if !invoice.Pending {
+	if invoice.Pending {
 		t.Fatalf("original invoice was mutated. expected pending = false got = true")
 	}
 
@@ -176,5 +187,91 @@ func TestTonProviderPollJettonBalanceChanged(t *testing.T) {
 
 	if updatedInv.Pending {
 		t.Fatalf("expected pending = false got = true")
+	}
+}
+
+func TestTonProviderPollNFTReceived(t *testing.T) {
+	client := &fakeChainClient{
+		block:    &chainBlock{},
+		nftOwner: "addr",
+	}
+
+	p := tonProvider{api: client}
+
+	invoice := Invoice{
+		Address: "addr",
+		Token: Token{
+			Symbol:   NftSymbol,
+			Contract: "collection|||123",
+			Decimals: 1,
+		},
+		Pending:    true,
+		AmountPaid: big.NewInt(0),
+		AmountOwed: big.NewInt(1),
+		Chain:      Ton,
+	}
+
+	updated, err := p.Poll(context.Background(), []Invoice{invoice})
+	if err != nil {
+		t.Fatalf("Poll failed = %v expected = nil", err)
+	}
+
+	if len(updated) != 1 {
+		t.Fatalf("expected 1 updated invoice, got %d", len(updated))
+	}
+
+	updatedInv := updated[0]
+
+	if updatedInv.AmountPaid.Cmp(big.NewInt(1)) != 0 {
+		t.Fatalf(
+			"expected NFT amountpaid = 1 got %s",
+			updatedInv.AmountPaid.String(),
+		)
+	}
+
+	if updatedInv.Pending {
+		t.Fatalf("expected pending = false got true")
+	}
+
+	if invoice.Pending != true {
+		t.Fatalf("original invoice was mutated")
+	}
+
+	if invoice.AmountPaid.Cmp(big.NewInt(0)) != 0 {
+		t.Fatalf(
+			"original invoice amountpaid mutated = %s",
+			invoice.AmountPaid.String(),
+		)
+	}
+}
+
+func TestTonProviderPollNFTNotReceived(t *testing.T) {
+	client := &fakeChainClient{
+		block:    &chainBlock{},
+		nftOwner: "different-owner",
+	}
+
+	p := tonProvider{api: client}
+
+	invoice := Invoice{
+		Address: "addr",
+		Token: Token{
+			Symbol:   NftSymbol,
+			Contract: "collection|||123",
+			Decimals: 1,
+		},
+		Pending:    false,
+		AmountPaid: big.NewInt(0),
+		AmountOwed: big.NewInt(1),
+		Chain:      Ton,
+	}
+
+	updated, err := p.Poll(context.Background(), []Invoice{invoice})
+	if err != nil {
+		t.Fatalf("Poll failed = %v expected = nil", err)
+	}
+
+	if len(updated) != 0 {
+		t.Fatalf("expected no update, got %+v", updated)
 	}
 }
