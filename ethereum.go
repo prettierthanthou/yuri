@@ -3,7 +3,6 @@ package yuri
 import (
 	"context"
 	"fmt"
-	"log"
 	"math/big"
 	"strings"
 )
@@ -194,7 +193,6 @@ func (e ethereumLike) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, 
 				bal.pending.Cmp(updatedInvoice.AmountOwed) >= 0
 
 		if InvoicePollChanged(invoices[i], updatedInvoice) {
-			log.Printf("invoice change: a = %+v b = %+v", invoices[i], updatedInvoice)
 			newInvoices = append(newInvoices, updatedInvoice)
 		}
 	}
