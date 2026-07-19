@@ -152,7 +152,7 @@ func FuzzDecode32_NoPanic(f *testing.F) {
 	f.Fuzz(func(t *testing.T, data []byte) {
 		var dst [32]byte
 		// Must not panic regardless of input.
-		Decode32(string(data), &dst)
+		_ = Decode32(string(data), &dst)
 	})
 }
 
@@ -165,7 +165,7 @@ func FuzzDecode64_NoPanic(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		var dst [64]byte
-		Decode64(string(data), &dst)
+		_ = Decode64(string(data), &dst)
 	})
 }
 
@@ -177,6 +177,6 @@ func FuzzDecode_NoPanic(f *testing.F) {
 	f.Add(bytes.Repeat([]byte("z"), 200))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
-		Decode(string(data))
+		_, _ = Decode(string(data))
 	})
 }

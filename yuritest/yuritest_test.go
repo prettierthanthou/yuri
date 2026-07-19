@@ -118,7 +118,9 @@ func TestEnv_MultipleContainers_SameNetwork(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed request to %s: %v", c.name, err)
 		}
-		resp.Body.Close()
+		if err := resp.Body.Close(); err != nil {
+			t.Fatalf("resp body Close failed: %+v", err)
+		}
 
 		if resp.StatusCode != 200 {
 			t.Fatalf("%s returned %d", c.name, resp.StatusCode)

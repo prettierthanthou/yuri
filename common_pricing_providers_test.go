@@ -67,7 +67,9 @@ func TestMarketProviderBuildsAssetSpecificURLs(t *testing.T) {
 			gotURI := ""
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				gotURI = r.URL.RequestURI()
-				w.Write([]byte(tt.responseBody))
+				if _, err := w.Write([]byte(tt.responseBody)); err != nil {
+					t.Fatalf("failed to write: %+v", err)
+				}
 			}))
 			defer srv.Close()
 
@@ -109,7 +111,10 @@ func TestMarketProviderUsesTokenSymbol(t *testing.T) {
 		if r.URL.Path != "/api/v1/rates/usdt/price" {
 			t.Fatalf("path = %q", r.URL.Path)
 		}
-		w.Write([]byte(`{"data":{"rate":1.00}}`))
+
+		if _, err := w.Write([]byte(`{"data":{"rate":1.00}}`)); err != nil {
+			t.Fatalf("failed to write: %+v", err)
+		}
 	}))
 	defer srv.Close()
 

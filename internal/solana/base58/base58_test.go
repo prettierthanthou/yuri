@@ -265,7 +265,9 @@ func TestDecode_InvalidChars_Variable(t *testing.T) {
 func BenchmarkBase58_Decode_Variable(b *testing.B) {
 	b.SetBytes(64)
 	for b.Loop() {
-		Decode(benchStr64)
+		if _, err := Decode(benchStr64); err != nil {
+			b.Fatalf("Decode failed: err %+v", err)
+		}
 	}
 }
 
@@ -329,7 +331,9 @@ func BenchmarkBase58_Decode32(b *testing.B) {
 	var dst [32]byte
 	b.SetBytes(32)
 	for b.Loop() {
-		Decode32(benchStr32, &dst)
+		if err := Decode32(benchStr32, &dst); err != nil {
+			b.Fatalf("Decode32 failed: %+v", err)
+		}
 	}
 }
 
@@ -345,6 +349,8 @@ func BenchmarkBase58_Decode64(b *testing.B) {
 	var dst [64]byte
 	b.SetBytes(64)
 	for b.Loop() {
-		Decode64(benchStr64, &dst)
+		if err := Decode64(benchStr64, &dst); err != nil {
+			b.Fatalf("Decode64 failed: %+v", err)
+		}
 	}
 }

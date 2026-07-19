@@ -212,7 +212,7 @@ func TestPollMonero(t *testing.T) {
 	}
 
 	start = time.Now()
-	_, err = customerJsonRpc.Do(context.Background(), JsonRpcRequest{
+	if _, err = customerJsonRpc.Do(context.Background(), JsonRpcRequest{
 		Method: "transfer",
 		Params: map[string]any{
 			"destinations": []map[string]any{
@@ -222,25 +222,27 @@ func TestPollMonero(t *testing.T) {
 				},
 			},
 		},
-	})
-
-	customerJsonRpc.Do(context.Background(), JsonRpcRequest{
-		Method: "refresh",
-	})
-	t.Log("transfer + refresh:", time.Since(start))
-
-	if err != nil {
+	}); err != nil {
 		t.Fatalf("transfer(customer) = %q", err)
 	}
+
+	if _, err = customerJsonRpc.Do(context.Background(), JsonRpcRequest{
+		Method: "refresh",
+	}); err != nil {
+		t.Fatalf("customerJsonRpc(refresh): %+v", err)
+	}
+	t.Log("transfer + refresh:", time.Since(start))
 
 	start = time.Now()
 	moneroGenerateBlocks(t, daemonJsonRpc, getCustomerAddressResp.Address, 1)
 	t.Log("1 block:", time.Since(start))
 
 	start = time.Now()
-	merchantJsonRpc.Do(context.Background(), JsonRpcRequest{
+	if _, err = merchantJsonRpc.Do(context.Background(), JsonRpcRequest{
 		Method: "refresh",
-	})
+	}); err != nil {
+		t.Fatalf("merchantJsonRpc(refresh): %+v", err)
+	}
 	t.Log("merchantJsonRpc refresh:", time.Since(start))
 
 	poll2ResultInvoices, err := monero.Poll(t.Context(), allInvoices)
@@ -257,9 +259,12 @@ func TestPollMonero(t *testing.T) {
 	t.Log("1 block:", time.Since(start))
 
 	start = time.Now()
-	merchantJsonRpc.Do(context.Background(), JsonRpcRequest{
+	if _, err := merchantJsonRpc.Do(context.Background(), JsonRpcRequest{
 		Method: "refresh",
-	})
+	}); err != nil {
+		t.Fatalf("merchantJsonRpc(refresh): %+v", err)
+	}
+
 	t.Log("merchantJsonRpc refresh:", time.Since(start))
 	poll3ResultValues, err := monero.Poll(t.Context(), allInvoices)
 	if err != nil {

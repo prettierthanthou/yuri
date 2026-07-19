@@ -2,6 +2,7 @@ package yuri
 
 import (
 	"context"
+	"log"
 	"math/big"
 	"strings"
 	"testing"
@@ -55,12 +56,14 @@ func bitcoinHelperCreateEnv(t *testing.T) JsonRpcClient {
 		panic(err)
 	}
 
-	rpc.Do(context.Background(), JsonRpcRequest{
+	if _, err := rpc.Do(context.Background(), JsonRpcRequest{
 		Method: "loadwallet",
 		Params: []any{
 			"test",
 		},
-	})
+	}); err != nil {
+		log.Panicf("failed to loadwallet: err %+v", err)
+	}
 
 	return rpc
 }
@@ -79,12 +82,14 @@ func bitcoinHelperCreateWallet(t *testing.T, base JsonRpcClient, walletName stri
 		t.Fatalf("createwallet(%s): %v", walletName, err)
 	}
 
-	base.Do(context.Background(), JsonRpcRequest{
+	if _, err := base.Do(context.Background(), JsonRpcRequest{
 		Method: "loadwallet",
 		Params: []any{
 			walletName,
 		},
-	})
+	}); err != nil {
+		t.Fatalf("loadwallet(%s): %v", walletName, err)
+	}
 
 	// return scoped wallet RPC client
 	return NewJsonRpcClient(JsonRpcClientConfig{

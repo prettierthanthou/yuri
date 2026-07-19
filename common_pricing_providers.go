@@ -77,8 +77,12 @@ func httpClient(c *http.Client) *http.Client {
 	return defaultHTTPClient
 }
 
-func parseBody(resp *http.Response, out any) error {
-	defer resp.Body.Close()
+func parseBody(resp *http.Response, out any) (err error) {
+	defer func() {
+		if cerr := resp.Body.Close(); err == nil && cerr != nil {
+			err = cerr
+		}
+	}()
 
 	// 5 MB
 	const maxResponse = 5 << 20
@@ -107,17 +111,26 @@ func getJSON(ctx context.Context, client *http.Client, raw string, out any) erro
 	}
 
 	if resp.StatusCode == http.StatusNotFound {
-		resp.Body.Close()
-		return ChainNotSupportedErr
+		if err = resp.Body.Close(); err != nil {
+			return err
+		}
+
+		return ErrChainNotSupported
 	}
 
 	if resp.StatusCode == http.StatusTooManyRequests {
-		resp.Body.Close()
+		if err = resp.Body.Close(); err != nil {
+			return err
+		}
+
 		return errors.New("pricing provider rate limited")
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
+		if err = resp.Body.Close(); err != nil {
+			return err
+		}
+
 		return fmt.Errorf("unexpected status: %d", resp.StatusCode)
 	}
 
@@ -241,7 +254,7 @@ func NewStaticPriceProvider(amount int64) PriceProvider { return staticProvider{
 
 func (p coinGeckoProvider) Get(ctx context.Context, currency Currency, chain string, token Token) (int64, error) {
 	if !wantFiat(currency) {
-		return -1, FiatCurrencyNotSupportedErr
+		return -1, ErrFiatCurrencyNotSupported
 	}
 
 	if token != (Token{}) {
@@ -260,7 +273,7 @@ func (p coinGeckoProvider) Get(ctx context.Context, currency Currency, chain str
 
 	row, ok := parsed[strings.ToLower(chain)]
 	if !ok {
-		return -1, ChainNotSupportedErr
+		return -1, ErrChainNotSupported
 	}
 
 	rate, ok := pickRate(row, currency.Code)
@@ -284,7 +297,7 @@ func geckoToken(ctx context.Context, client *http.Client, currency Currency, cha
 
 	row, ok := parsed[strings.ToLower(token.Contract)]
 	if !ok {
-		return -1, ChainNotSupportedErr
+		return -1, ErrChainNotSupported
 	}
 
 	rate, ok := pickRate(row, currency.Code)
@@ -305,7 +318,7 @@ func (s staticProvider) Get(context.Context, Currency, string, Token) (int64, er
 
 func (p marketProvider) Get(ctx context.Context, currency Currency, chain string, token Token) (int64, error) {
 	if !wantFiat(currency) {
-		return -1, FiatCurrencyNotSupportedErr
+		return -1, ErrFiatCurrencyNotSupported
 	}
 
 	client := httpClient(p.client)
@@ -585,7 +598,7 @@ func (p marketProvider) Get(ctx context.Context, currency Currency, chain string
 				}
 			}
 		}
-		return -1, ChainNotSupportedErr
+		return -1, ErrChainNotSupported
 	}
 
 	return -1, unsupportedPairError(chain, token, currency)
@@ -593,16 +606,16 @@ func (p marketProvider) Get(ctx context.Context, currency Currency, chain string
 
 func unsupportedPairError(chain string, token Token, currency Currency) error {
 	if token != (Token{}) {
-		return fmt.Errorf("%w: %s token %s/%s", ChainNotSupportedErr, chain, token.Symbol, currency.Code)
+		return fmt.Errorf("%w: %s token %s/%s", ErrChainNotSupported, chain, token.Symbol, currency.Code)
 	}
-	return fmt.Errorf("%w: %s/%s", ChainNotSupportedErr, chain, currency.Code)
+	return fmt.Errorf("%w: %s/%s", ErrChainNotSupported, chain, currency.Code)
 }
 
 func valueFromAny(bid any, ask any, currency Currency) (int64, error) {
 	b, bok := asFloat(bid)
 	a, aok := asFloat(ask)
 	if !bok || !aok {
-		return -1, ChainNotSupportedErr
+		return -1, ErrChainNotSupported
 	}
 
 	return numberToMinor(currency, (b+a)/2)
@@ -662,7 +675,7 @@ func asFloat(v any) (float64, bool) {
 func numberToMinor(currency Currency, v any) (int64, error) {
 	f, ok := asFloat(v)
 	if !ok {
-		return -1, ChainNotSupportedErr
+		return -1, ErrChainNotSupported
 	}
 
 	return currency.ToMinor(f), nil

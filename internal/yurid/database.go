@@ -146,7 +146,9 @@ func (d *database) GetActiveInvoices(ctx context.Context, chain yuri.Chain) ([]y
 	if err != nil {
 		return nil, fmt.Errorf("querying active invoices failed: %+v", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var collectedInvoices []yuri.Invoice
 
@@ -274,7 +276,9 @@ func (d *database) UpdateInvoices(ctx context.Context, invoices []yuri.Invoice) 
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() {
+		_ = tx.Rollback()
+	}()
 
 	stmt, err := tx.PrepareContext(ctx, `
 		insert into "invoice"
@@ -290,7 +294,9 @@ func (d *database) UpdateInvoices(ctx context.Context, invoices []yuri.Invoice) 
 	if err != nil {
 		return err
 	}
-	defer stmt.Close()
+	defer func() {
+		_ = stmt.Close()
+	}()
 
 	for _, inv := range invoices {
 		invoiceId, ok := inv.Metadata[yuridInvoiceUUIDMetaId]

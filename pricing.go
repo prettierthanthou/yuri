@@ -10,8 +10,8 @@ import (
 )
 
 var (
-	FiatCurrencyNotSupportedErr = errors.New("requested currency is not supported by the pricing provider")
-	ChainNotSupportedErr        = errors.New("requested chain/token is not supported by the pricing provider")
+	ErrFiatCurrencyNotSupported = errors.New("requested currency is not supported by the pricing provider")
+	ErrChainNotSupported        = errors.New("requested chain/token is not supported by the pricing provider")
 )
 
 // PriceProvider respresents some place where we can fetch current prices

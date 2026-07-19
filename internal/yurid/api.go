@@ -212,7 +212,7 @@ func (a *API) handleNew(w http.ResponseWriter, r *http.Request) {
 
 	req.Metadata[yuridInvoiceFiatMetaID] = req.AmountFiat
 	if req.ExpiresAt != 0 {
-		req.InvoiceCreate.Metadata[yuridInvoiceExpireyMetaID] = time.UnixMilli(req.ExpiresAt)
+		req.Metadata[yuridInvoiceExpireyMetaID] = time.UnixMilli(req.ExpiresAt)
 	}
 	inv, err := a.instance.NewInvoice(ctx, req.InvoiceCreate)
 	if err != nil {

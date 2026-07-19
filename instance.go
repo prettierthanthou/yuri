@@ -60,15 +60,15 @@ func New(options Options) (*Instance, error) {
 	}
 
 	if options.Storage == nil {
-		return nil, fmt.Errorf("Storage cannot be nil")
+		return nil, fmt.Errorf("storage cannot be nil")
 	}
 
 	if len(options.Pricing) == 0 {
-		return nil, fmt.Errorf("Pricing must have atleast 1 pricing provider")
+		return nil, fmt.Errorf("pricing must have atleast 1 pricing provider")
 	}
 
 	if len(options.Chains) == 0 {
-		return nil, fmt.Errorf("Chains must have atleast 1 CryptoProvider")
+		return nil, fmt.Errorf("chains must have atleast 1 CryptoProvider")
 	}
 
 	if options.PriceAggregator == nil {
@@ -245,7 +245,7 @@ func (i *Instance) NewNFTInvoice(ctx context.Context, invoiceCreate InvoiceCreat
 
 	addr, err := chain.CreateAddress(ctx)
 	if err != nil {
-		return Invoice{}, fmt.Errorf("Failed to create address for invoice: err = %+v invoice = %+v", err, invoiceCreate)
+		return Invoice{}, fmt.Errorf("failed to create address for invoice: err = %+v invoice = %+v", err, invoiceCreate)
 	}
 
 	inv := Invoice{
@@ -259,7 +259,7 @@ func (i *Instance) NewNFTInvoice(ctx context.Context, invoiceCreate InvoiceCreat
 	}
 
 	if err := i.opts.Storage.NewInvoice(ctx, inv); err != nil {
-		return Invoice{}, fmt.Errorf("Failed to save invoice to storage: %+v", err)
+		return Invoice{}, fmt.Errorf("failed to save invoice to storage: %+v", err)
 	}
 
 	return inv, nil
@@ -286,7 +286,7 @@ func (i *Instance) NewInvoice(ctx context.Context, invoiceCreate InvoiceCreate) 
 
 	aggregatedPrice, err := i.getPrice(ctx, invoiceCreate.AmountFiat.Currency, chain, invoiceCreate.Token)
 	if err != nil {
-		return Invoice{}, fmt.Errorf("Failed to get average price for invoice create: err = %+v invoice = %+v", err, invoiceCreate)
+		return Invoice{}, fmt.Errorf("failed to get average price for invoice create: err = %+v invoice = %+v", err, invoiceCreate)
 	}
 
 	if aggregatedPrice <= 0 {
@@ -323,7 +323,7 @@ func (i *Instance) NewInvoice(ctx context.Context, invoiceCreate InvoiceCreate) 
 
 	addr, err := chain.CreateAddress(ctx)
 	if err != nil {
-		return Invoice{}, fmt.Errorf("Failed to create address for invoice: err = %+v invoice = %+v", err, invoiceCreate)
+		return Invoice{}, fmt.Errorf("failed to create address for invoice: err = %+v invoice = %+v", err, invoiceCreate)
 	}
 
 	inv := Invoice{
@@ -337,7 +337,7 @@ func (i *Instance) NewInvoice(ctx context.Context, invoiceCreate InvoiceCreate) 
 	}
 
 	if err := i.opts.Storage.NewInvoice(ctx, inv); err != nil {
-		return Invoice{}, fmt.Errorf("Failed to save invoice to storage: %+v", err)
+		return Invoice{}, fmt.Errorf("failed to save invoice to storage: %+v", err)
 	}
 
 	return inv, nil

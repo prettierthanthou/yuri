@@ -102,7 +102,7 @@ func RPCDo(
 }
 
 // You generally want to use RPCDo instead for an easier life.
-func (c JsonRpcClient) Do(ctx context.Context, request JsonRpcRequest) (JsonRpcResponse, error) {
+func (c JsonRpcClient) Do(ctx context.Context, request JsonRpcRequest) (jsonResp JsonRpcResponse, err error) {
 	rid := request.Id
 	if rid == "" {
 		rid = strconv.FormatInt(int64(rand.Int()), 10)
@@ -142,7 +142,12 @@ func (c JsonRpcClient) Do(ctx context.Context, request JsonRpcRequest) (JsonRpcR
 		return JsonRpcResponse{}, err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if cerr := resp.Body.Close(); err == nil && cerr != nil {
+			err = cerr
+		}
+	}()
+
 	readBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return JsonRpcResponse{}, err
