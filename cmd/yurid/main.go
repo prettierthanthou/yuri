@@ -61,9 +61,9 @@ func main() {
 
 	slog.Info("created instance", "instance", instance)
 
-	activeChainNames := make([]string, len(conf.Chains))
-	for _, chain := range activeChainNames {
-		activeChainNames = append(activeChainNames, chain)
+	activeChainNames := make([]string, 0, len(conf.Chains))
+	for _, chain := range conf.Chains {
+		activeChainNames = append(activeChainNames, string(chain.Chain()))
 	}
 
 	slog.Info("starting REST API at", "url", conf.Addr)
