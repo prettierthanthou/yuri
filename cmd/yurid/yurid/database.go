@@ -11,10 +11,7 @@ import (
 	"time"
 
 	"codeberg.org/lewdest/yuri"
-	_ "github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
-	_ "github.com/jackc/pgx/v5/stdlib"
-	_ "modernc.org/sqlite"
 )
 
 const yuridInvoiceUUIDMetaId = "yurid-uuid"

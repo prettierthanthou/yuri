@@ -9,7 +9,11 @@ import (
 	"strings"
 
 	"codeberg.org/lewdest/yuri"
-	"codeberg.org/lewdest/yuri/internal/yurid"
+	"codeberg.org/lewdest/yuri/cmd/yurid/yurid"
+
+	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/jackc/pgx/v5/stdlib"
+	_ "modernc.org/sqlite"
 )
 
 func main() {
