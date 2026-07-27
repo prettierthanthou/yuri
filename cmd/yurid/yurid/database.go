@@ -59,6 +59,10 @@ func NewDatabase(conf DatabaseConfig) (*database, error) {
 	return database, nil
 }
 
+func (d *database) Close() error {
+	return d.db.Close()
+}
+
 func (d *database) ensureSchema() error {
 	_, err := d.db.Exec(`
 	create table if not exists "invoice" (
@@ -107,10 +111,14 @@ func (d *database) GetInvoiceByID(ctx context.Context, id string) (*yuri.Invoice
 	}
 
 	owed := new(big.Int)
-	owed.SetString(owedStr, 10)
+	if _, ok := owed.SetString(owedStr, 10); !ok {
+		return nil, fmt.Errorf("failed to SetString for owedStr")
+	}
 
 	paid := new(big.Int)
-	paid.SetString(paidStr, 10)
+	if _, ok := paid.SetString(paidStr, 10); !ok {
+		return nil, fmt.Errorf("failed to SetString for paidStr")
+	}
 
 	var token yuri.Token
 	if err := json.Unmarshal([]byte(tokenStr), &token); err != nil {
@@ -138,7 +146,7 @@ func (d *database) GetActiveInvoices(ctx context.Context, chain yuri.Chain) ([]y
 		select id, chain, address, amount_owed, amount_paid, token, metadata, expires_at
 		from "invoice"
 		where chain = ?
-		  and expires_at > CURRENT_TIMESTAMP
+		  and (expires_at IS NULL or expires_at > CURRENT_TIMESTAMP)
 	`, chain)
 	if err != nil {
 		return nil, fmt.Errorf("querying active invoices failed: %+v", err)
