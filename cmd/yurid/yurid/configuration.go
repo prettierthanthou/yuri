@@ -218,7 +218,23 @@ func ParseConfig() (Configuration, error) {
 
 			return yuri.ProviderHooks{
 				OnNewAddress: func(ctx context.Context, pk1 crypto.PublicKey, pk2 crypto.PrivateKey) error {
-					return os.WriteFile(path.Join(cfg.walletOutDir, base64.RawStdEncoding.EncodeToString(pk1.(ed25519.PublicKey))), pk2.(ed25519.PrivateKey), 0666)
+					pk3, ok := pk1.(ed25519.PublicKey)
+					if !ok {
+						return fmt.Errorf("failed to cast PublicKey to ed25519 PublicKey: err %+v", err)
+					}
+					pk4, ok := pk2.(ed25519.PrivateKey)
+					if !ok {
+						return fmt.Errorf("failed to cast PrivateKey to ed25519 PublicKey: err %+v", err)
+					}
+
+					return os.WriteFile(
+						path.Join(
+							cfg.walletOutDir,
+							base64.RawStdEncoding.EncodeToString(pk3),
+						),
+						pk4,
+						0600,
+					)
 				},
 			}, nil
 		}
@@ -235,10 +251,16 @@ func ParseConfig() (Configuration, error) {
 				host = yuri.TonMainnetPublic
 			}
 
-			out.Chains = append(out.Chains, yuri.NewTon(yuri.TonOptions{
+			tonProvider, err := yuri.NewTon(yuri.TonOptions{
 				ConfigUrl: host,
 				Hooks:     hooks,
-			}))
+			})
+
+			if err != nil {
+				return Configuration{}, fmt.Errorf("failed to create TonProvider: err %+v", err)
+			}
+
+			out.Chains = append(out.Chains, tonProvider)
 		case yuri.Solana:
 			hooks, err := getHooks()
 			if err != nil {
