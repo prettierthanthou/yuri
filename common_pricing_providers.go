@@ -559,7 +559,11 @@ func (p marketProvider) Get(ctx context.Context, currency Currency, chain string
 			if result, ok := m["result"].(map[string]any); ok {
 				for _, rowv := range result {
 					if row, ok := rowv.(map[string]any); ok {
-						return valueFromStrings(currency, row["b"].([]any), row["a"].([]any))
+						if rowB, ok := row["b"].([]any); ok {
+							if rowA, ok := row["a"].([]any); ok {
+								return valueFromStrings(currency, rowB, rowA)
+							}
+						}
 					}
 				}
 			}
