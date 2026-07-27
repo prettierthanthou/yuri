@@ -239,7 +239,7 @@ func (e ethereumLike) rpcERC721Ownership(ctx context.Context, addr string, nftId
 		Method: "eth_call",
 		Params: []any{call, tag},
 	}, &raw); err != nil {
-		return big.NewInt(0), nil
+		return big.NewInt(0), fmt.Errorf("failed eth_call: err %+v", err)
 	}
 
 	raw = strings.TrimPrefix(strings.TrimSpace(raw), "0x")
