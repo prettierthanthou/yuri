@@ -5,8 +5,12 @@ import (
 	"errors"
 	"flag"
 	"log/slog"
+	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 
 	"codeberg.org/lewdest/yuri"
 	"codeberg.org/lewdest/yuri/cmd/yurid/yurid"
@@ -41,6 +45,9 @@ func main() {
 		return
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	instance, err := yuri.New(yuri.Options{
 		Hooks: yuri.Hooks{
 			OnError: func(err error) {
@@ -61,7 +68,7 @@ func main() {
 		return
 	}
 
-	go instance.Run(context.Background())
+	go instance.Run(ctx)
 
 	slog.Info("created instance", "instance", instance)
 
@@ -70,9 +77,42 @@ func main() {
 		activeChainNames = append(activeChainNames, string(chain.Chain()))
 	}
 
-	slog.Info("starting REST API at", "url", conf.Addr)
 	api := yurid.NewAPI(conf.Addr, database, instance, activeChainNames)
-	if err := api.ListenAndServe(); err != nil {
-		slog.Error("api ListenAndServe failed", "err", err)
+
+	srv := &http.Server{
+		Addr:              conf.Addr,
+		Handler:           api.Handler(),
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
 	}
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		slog.Info("starting REST API at", "url", conf.Addr)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("api ListenAndServe failed", "err", err)
+			os.Exit(1)
+		}
+	}()
+
+	sig := <-sigCh
+	slog.Info("received signal, shutting down", "signal", sig)
+
+	cancel()
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		slog.Error("http server shutdown failed", "err", err)
+	}
+
+	if err := database.Close(); err != nil {
+		slog.Error("database close failed", "err", err)
+	}
+
+	slog.Info("shutdown complete")
 }
