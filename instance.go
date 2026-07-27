@@ -185,6 +185,7 @@ func (i *Instance) getPrice(ctx context.Context, currency Currency, chain Crypto
 			select {
 			case <-ctx.Done():
 				priceQuoteChan <- PriceQuote{Err: ctx.Err(), FiatMinorUnits: -1}
+				return
 			default:
 			}
 

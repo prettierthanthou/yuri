@@ -1021,3 +1021,51 @@ func TestInstanceRunUsesMaxPollDuration(t *testing.T) {
 		t.Fatal("Run() did not exit after cancellation")
 	}
 }
+
+func TestGetPriceCompletesWhenContextCancelled(t *testing.T) {
+	slowProvider := &blockingPriceProvider{
+		unblock: make(chan struct{}),
+	}
+
+	instance, err := New(Options{
+		Storage: &InMemoryStorage{},
+		Pricing: []PriceProvider{slowProvider},
+		Chains:  []CryptoProvider{&testingFakeCryptoProvider{}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel BEFORE calling getPrice so the ctx.Done case fires immediately
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := instance.getPrice(ctx, USD, &testingFakeCryptoProvider{}, Token{})
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected error from getPrice after context cancellation")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("getPrice deadlocked after context cancellation — missing return in ctx.Done case")
+	}
+
+	close(slowProvider.unblock)
+}
+
+var _ PriceProvider = &blockingPriceProvider{}
+
+type blockingPriceProvider struct {
+	unblock chan struct{}
+}
+
+func (b *blockingPriceProvider) WantsFullChainName() bool { return true }
+
+func (b *blockingPriceProvider) Get(_ context.Context, _ Currency, _ string, _ Token) (int64, error) {
+	<-b.unblock
+	return 0, errors.New("unblocked")
+}
