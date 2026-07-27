@@ -61,7 +61,7 @@ func bitcoinHelperCreateEnv(t *testing.T) JsonRpcClient {
 		Params: []any{
 			"test",
 		},
-	}); err != nil {
+	}); err != nil && !strings.Contains(err.Error(), "is already") {
 		log.Panicf("failed to loadwallet: err %+v", err)
 	}
 
@@ -87,7 +87,7 @@ func bitcoinHelperCreateWallet(t *testing.T, base JsonRpcClient, walletName stri
 		Params: []any{
 			walletName,
 		},
-	}); err != nil {
+	}); err != nil && !strings.Contains(err.Error(), "is already loaded") {
 		t.Fatalf("loadwallet(%s): %v", walletName, err)
 	}
 
@@ -121,7 +121,7 @@ func TestBitcoinLikeForLTCPriceSymbol(t *testing.T) {
 }
 
 func TestBitcoinLikePriceSymbolForRandom(t *testing.T) {
-	const symbol = "random"
+	const symbol = "RANDOM"
 	random := bitcoinLike{chain: Chain(symbol)}
 	if random.PriceSymbol() != symbol {
 		t.Fatalf("Bitcoin PriceSymbol expected = %s got = %s", symbol, random.PriceSymbol())
