@@ -163,33 +163,49 @@ type TonOptions struct {
 const TonMainnetPublic = "https://ton-blockchain.github.io/global.config.json"
 const TonTestnetPublic = "https://ton-blockchain.github.io/testnet-global.config.json"
 
-// NewTon creates a new [tonProvider]. If there is not a [chainClient] provided
+// MustTon creates a new [tonProvider]. If there is not a [chainClient] provided
 // a [liteclient.ConnectionPool] with [TonMainnetPublic] connections is created.
+//
+// MustTon will panic if ConfigURL to add Connections from fails!
 //
 // This is equivilant to calling
 //
-//	NewTon(opts, TonMainnetPublic)
-func NewTon(opts TonOptions) tonProvider {
+//	MustTon(opts, TonMainnetPublic)
+func MustTon(opts TonOptions) tonProvider {
+	return MustTonWithConfigUrl(opts, TonMainnetPublic)
+}
+
+// MustTonWithConfigUrl creates a new [tonProvider] and configures a [liteclient.ConnectionPool]
+// to the provided [configUrl]
+// MustTonWithConfigUrl will panic if ConfigURL to add Connections from fails!
+func MustTonWithConfigUrl(opts TonOptions, configUrl string) tonProvider {
+	p, err := NewTonWithConfigUrl(opts, configUrl)
+	if err != nil {
+		panic(err)
+	}
+
+	return p
+}
+
+func NewTon(opts TonOptions) (tonProvider, error) {
 	return NewTonWithConfigUrl(opts, TonMainnetPublic)
 }
 
-// NewTonWithConfigUrl creates a new [tonProvider] and configures a [liteclient.ConnectionPool]
-// to the provided [configUrl]
-func NewTonWithConfigUrl(opts TonOptions, configUrl string) tonProvider {
+func NewTonWithConfigUrl(opts TonOptions, configUrl string) (tonProvider, error) {
 	if opts.Client == nil {
 		client := liteclient.NewConnectionPool()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
 		if err := client.AddConnectionsFromConfigUrl(ctx, opts.ConfigUrl); err != nil {
-			panic(fmt.Sprintf("Ton AddConnectionsFromConfigUrl failed: %+v", err))
+			return tonProvider{}, fmt.Errorf("Ton AddConnectionsFromConfigUrl failed: %+v", err)
 		}
 
 		api := ton.NewAPIClient(client)
 		opts.Client = &tonChainClient{api: api}
 	}
 
-	return tonProvider{api: opts.Client, hooks: opts.Hooks}
+	return tonProvider{api: opts.Client, hooks: opts.Hooks}, nil
 }
 
 type tonProvider struct {
