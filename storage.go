@@ -109,8 +109,13 @@ func (i *InMemoryStorage) GetActiveInvoices(_ context.Context, chain Chain) ([]I
 
 	invs := i.activeInvoices[chain]
 
-	out := make([]Invoice, len(invs))
-	copy(out, invs)
+	out := make([]Invoice, 0, len(invs))
+	// we do not use `copy(out, invs)` here as
+	// it will not properly clone our invoices and result
+	// in Balances being the mutable between providers.
+	for _, inv := range invs {
+		out = append(out, inv.Clone())
+	}
 
 	return out, nil
 }
