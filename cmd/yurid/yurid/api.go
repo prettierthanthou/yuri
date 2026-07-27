@@ -37,6 +37,10 @@ func NewAPI(addr string, database Database, instance *yuri.Instance, activeChain
 	return api
 }
 
+func (a *API) Handler() http.Handler {
+	return a.mux
+}
+
 func (a *API) ListenAndServe() error {
 	srv := &http.Server{
 		Addr:              a.addr,
@@ -247,7 +251,10 @@ func (a *API) handleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	inv, err := a.storage.GetInvoiceByID(r.Context(), id)
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	inv, err := a.storage.GetInvoiceByID(ctx, id)
 	if err != nil {
 		code := http.StatusInternalServerError
 		if errors.Is(err, sql.ErrNoRows) {
