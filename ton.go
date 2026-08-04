@@ -46,8 +46,10 @@ func (c *tonChainClient) CreateAddress(ctx context.Context, hooks ProviderHooks)
 		return "", err
 	}
 
-	if err := hooks.OnNewAddress(ctx, w.PrivateKey().Public(), w.PrivateKey()); err != nil {
-		return "", err
+	if hooks.OnNewAddress != nil {
+		if err := hooks.OnNewAddress(ctx, w.PrivateKey().Public(), w.PrivateKey()); err != nil {
+			return "", err
+		}
 	}
 
 	return w.WalletAddress().String(), nil
