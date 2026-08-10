@@ -299,6 +299,10 @@ func (i *Instance) NewInvoice(ctx context.Context, invoiceCreate InvoiceCreate) 
 		cryptoDecimals = invoiceCreate.Token.Decimals
 	}
 
+	if cryptoDecimals >= 24 {
+		return Invoice{}, fmt.Errorf("token decimals exceeds 24 digits (%d): are you sure this is correct?", cryptoDecimals)
+	}
+
 	fiat := big.NewInt(invoiceCreate.AmountFiat.Minor)
 	price := big.NewInt(aggregatedPrice)
 
