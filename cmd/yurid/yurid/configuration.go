@@ -32,7 +32,7 @@ const exampleUsage = `yurid \
 
 var supportedChains = map[yuri.Chain]func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider{
 	yuri.Bitcoin:  func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewBitcoin(rpc) },
-	yuri.Litecoin: func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewBitcoin(rpc) },
+	yuri.Litecoin: func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewLitecoin(rpc) },
 	yuri.Ethereum: func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewEthereum(rpc) },
 	yuri.BNB:      func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewBNB(rpc) },
 	yuri.Monero:   func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewMonero(rpc) },
