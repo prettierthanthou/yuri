@@ -62,7 +62,15 @@ func pairMatchesMarket(pair, base, quote string) bool {
 	base = strings.ToUpper(base)
 	quote = strings.ToUpper(quote)
 
-	return strings.HasPrefix(pair, base) && strings.HasSuffix(pair, quote)
+	if base == "" || quote == "" {
+		return false
+	}
+
+	// require an exact length match so that for example "BTCUSDT" is
+	// never treated as a "BTC/USD" pair.
+	return len(pair) == len(base)+len(quote) &&
+		strings.HasPrefix(pair, base) &&
+		strings.HasSuffix(pair, quote)
 }
 
 var defaultHTTPClient = &http.Client{
@@ -476,23 +484,13 @@ func (p marketProvider) Get(ctx context.Context, currency Currency, chain string
 		}
 		return -1, unsupportedPairError(chain, token, currency)
 	case "https://api.bitflyer.jp/v1/ticker":
-		if m, ok := asMap(payload); ok {
-			if strings.Contains(strings.ToUpper(fmt.Sprint(m["product_code"])), assetSymbol(chain, token)) {
-				return valueFromAny(m["best_bid"], m["best_ask"], currency)
-			}
+		if v, ok := parseBitflyerTicker(payload, base, currency); ok {
+			return v, nil
 		}
 		return -1, unsupportedPairError(chain, token, currency)
-	case "https://api.bitpay.com/rates":
-		if m, ok := asMap(payload); ok {
-			if data, ok := m["data"].([]any); ok {
-				for _, item := range data {
-					if row, ok := item.(map[string]any); ok {
-						if strings.EqualFold(fmt.Sprint(row["code"]), currency.Code) {
-							return numberToMinor(currency, row["rate"])
-						}
-					}
-				}
-			}
+	case "https://bitpay.com/rates":
+		if v, ok := parseBitpayRates(payload, base, currency); ok {
+			return v, nil
 		}
 		return -1, unsupportedPairError(chain, token, currency)
 	case "https://api.coindcx.com/exchange/ticker":
@@ -514,33 +512,13 @@ func (p marketProvider) Get(ctx context.Context, currency Currency, chain string
 		}
 		return -1, unsupportedPairError(chain, token, currency)
 	case "https://coinmate.io/api/tickerAll":
-		if m, ok := asMap(payload); ok {
-			if data, ok := m["data"].(map[string]any); ok {
-				for _, v := range data {
-					if row, ok := v.(map[string]any); ok {
-						if pairMatchesMarket(fmt.Sprint(row["pair"]), base, currency.Code) {
-							return valueFromAny(row["bid"], row["ask"], currency)
-						}
-					}
-				}
-			}
+		if v, ok := parseCoinmateTicker(payload, base, currency); ok {
+			return v, nil
 		}
 		return -1, unsupportedPairError(chain, token, currency)
 	case "https://api.exchange.cryptomkt.com/api/3/public/ticker/":
-		if m, ok := asMap(payload); ok {
-			for _, pair := range []string{base + "ARS", base + "CLP", base + "BRL"} {
-				if row, ok := m[pair].(map[string]any); ok {
-					if bid, bok := asFloat(row["bid"]); bok {
-						if ask, aok := asFloat(row["ask"]); aok {
-							return numberToMinor(currency, (bid+ask)/2)
-						}
-					}
-
-					if last, ok := asFloat(row["last"]); ok {
-						return numberToMinor(currency, last)
-					}
-				}
-			}
+		if v, ok := parseCryptoMarketTicker(payload, base, currency); ok {
+			return v, nil
 		}
 		return -1, unsupportedPairError(chain, token, currency)
 	case "https://api.hitbtc.com/api/2/public/ticker":
@@ -555,18 +533,8 @@ func (p marketProvider) Get(ctx context.Context, currency Currency, chain string
 		}
 		return -1, unsupportedPairError(chain, token, currency)
 	case "https://api.kraken.com/0/public/Ticker":
-		if m, ok := asMap(payload); ok {
-			if result, ok := m["result"].(map[string]any); ok {
-				for _, rowv := range result {
-					if row, ok := rowv.(map[string]any); ok {
-						if rowB, ok := row["b"].([]any); ok {
-							if rowA, ok := row["a"].([]any); ok {
-								return valueFromStrings(currency, rowB, rowA)
-							}
-						}
-					}
-				}
-			}
+		if v, ok := parseKrakenTicker(payload, base, currency); ok {
+			return v, nil
 		}
 		return -1, unsupportedPairError(chain, token, currency)
 	case "https://api.luno.com/api/1/tickers":
@@ -606,6 +574,208 @@ func (p marketProvider) Get(ctx context.Context, currency Currency, chain string
 	}
 
 	return -1, unsupportedPairError(chain, token, currency)
+}
+
+// krakenAssetSymbol converts commonly used upstream symbols into the
+// naming Kraken uses for its pairs. Bitcoin is "XBT" on Kraken.
+func krakenAssetSymbol(symbol string) string {
+	if strings.EqualFold(symbol, "BTC") {
+		return "XBT"
+	}
+
+	return symbol
+}
+
+// pairMatchesKraken matches a Kraken pair key against a base/quote.
+//
+// Kraken naming is inconsistent across pairs: the api.kraken.com Ticker
+// response uses one of "BASEQUOTE" (e.g. "SOLUSD", "AAVEEUR"),
+// "BASEZQUOTE" (e.g. "XBTZUSD"), or "XBASEZQUOTE" (e.g. "XXBTZUSD",
+// "XETHZUSD", "XXRPZUSD") depending on the asset.
+func pairMatchesKraken(pair, base, quote string) bool {
+	pair = strings.ToUpper(strings.ReplaceAll(pair, "_", ""))
+	base = strings.ToUpper(base)
+	quote = strings.ToUpper(quote)
+
+	if base == "" || quote == "" {
+		return false
+	}
+
+	return pair == base+quote ||
+		pair == base+"Z"+quote ||
+		pair == "X"+base+quote ||
+		pair == "X"+base+"Z"+quote
+}
+
+// parseKrakenTicker finds the requested base/quote pair inside the
+// `result` map of a Kraken /0/public/Ticker response.
+//
+// Both the `wsname` field (e.g. "XBT/USD") used by newer Kraken
+// endpoints and the pair key itself are treated as authoritative. Only
+// an exact base/quote match is accepted so a random ticker is never
+// returned.
+func parseKrakenTicker(payload any, base string, currency Currency) (int64, bool) {
+	m, ok := asMap(payload)
+	if !ok {
+		return 0, false
+	}
+
+	result, ok := asMap(m["result"])
+	if !ok {
+		return 0, false
+	}
+
+	base = krakenAssetSymbol(base)
+
+	for pair, rowv := range result {
+		row, ok := rowv.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		matched := false
+		if ws, ok := row["wsname"].(string); ok {
+			// when present the wsname is authoritative: a mismatching
+			// wsname must never fall back to the pair key.
+			parts := strings.Split(ws, "/")
+			matched = len(parts) == 2 &&
+				strings.EqualFold(strings.TrimSpace(parts[0]), base) &&
+				strings.EqualFold(strings.TrimSpace(parts[1]), currency.Code)
+		} else {
+			matched = pairMatchesKraken(pair, base, currency.Code)
+		}
+
+		if !matched {
+			continue
+		}
+
+		v, err := valueFromAny(row["b"], row["a"], currency)
+		if err == nil {
+			return v, true
+		}
+	}
+
+	return 0, false
+}
+
+// parseBitflyerTicker matches a single-product Bitflyer /v1/ticker
+// response against the requested base/quote. The product code is matched
+// exactly so a request for XMR/USD can never be served an XMR_JPY price.
+func parseBitflyerTicker(payload any, base string, currency Currency) (int64, bool) {
+	m, ok := asMap(payload)
+	if !ok {
+		return 0, false
+	}
+
+	if !pairMatchesMarket(fmt.Sprint(m["product_code"]), base, currency.Code) {
+		return 0, false
+	}
+
+	v, err := valueFromAny(m["best_bid"], m["best_ask"], currency)
+	return v, err == nil
+}
+
+// parseBitpayRates matches a BitPay /rates response against the requested
+// base/quote. BitPay only publishes BTC rates, so any other base is not
+// supported by this provider.
+func parseBitpayRates(payload any, base string, currency Currency) (int64, bool) {
+	if !strings.EqualFold(base, "BTC") {
+		return 0, false
+	}
+
+	m, ok := asMap(payload)
+	if !ok {
+		return 0, false
+	}
+
+	data, ok := m["data"].([]any)
+	if !ok {
+		return 0, false
+	}
+
+	for _, item := range data {
+		row, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		if !strings.EqualFold(fmt.Sprint(row["code"]), currency.Code) {
+			continue
+		}
+
+		v, err := numberToMinor(currency, row["rate"])
+		return v, err == nil
+	}
+
+	return 0, false
+}
+
+// parseCryptoMarketTicker matches a CryptoMarket /ticker/ response against
+// the requested base/quote. CryptoMarket only lists ARS, CLP and BRL
+// pairs, so any other requested currency is not supported.
+func parseCryptoMarketTicker(payload any, base string, currency Currency) (int64, bool) {
+	m, ok := asMap(payload)
+	if !ok {
+		return 0, false
+	}
+
+	for _, pair := range []string{base + "ARS", base + "CLP", base + "BRL"} {
+		if !strings.EqualFold(strings.TrimPrefix(pair, base), currency.Code) {
+			continue
+		}
+
+		row, ok := m[pair].(map[string]any)
+		if !ok {
+			continue
+		}
+
+		if bid, bok := asFloat(row["bid"]); bok {
+			if ask, aok := asFloat(row["ask"]); aok {
+				v, err := numberToMinor(currency, (bid+ask)/2)
+				return v, err == nil
+			}
+		}
+
+		if last, ok := asFloat(row["last"]); ok {
+			v, err := numberToMinor(currency, last)
+			return v, err == nil
+		}
+	}
+
+	return 0, false
+}
+
+// parseCoinmateTicker matches a Coinmate /tickerAll response against the
+// requested base/quote. The pair name is the map key of each ticker row,
+// not a field inside the row.
+func parseCoinmateTicker(payload any, base string, currency Currency) (int64, bool) {
+	m, ok := asMap(payload)
+	if !ok {
+		return 0, false
+	}
+
+	data, ok := asMap(m["data"])
+	if !ok {
+		return 0, false
+	}
+
+	for pair, rowv := range data {
+		row, ok := rowv.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		if !pairMatchesMarket(pair, base, currency.Code) {
+			continue
+		}
+
+		v, err := valueFromAny(row["bid"], row["ask"], currency)
+		if err == nil {
+			return v, true
+		}
+	}
+
+	return 0, false
 }
 
 func unsupportedPairError(chain string, token Token, currency Currency) error {

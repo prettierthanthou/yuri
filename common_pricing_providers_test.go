@@ -106,6 +106,219 @@ func TestMarketProviderBuildsAssetSpecificURLs(t *testing.T) {
 	}
 }
 
+func TestPairMatchesMarket(t *testing.T) {
+	tests := []struct {
+		pair  string
+		base  string
+		quote string
+		want  bool
+	}{
+		{"BTCUSD", "BTC", "USD", true},
+		{"BTC_TRY", "BTC", "TRY", true},
+		{"BTCJPY", "BTC", "JPY", true},
+		{"XBTUSD", "XBT", "USD", true},
+		{"ETHUSDT", "ETH", "USDT", true},
+		{"BTCUSDT", "BTC", "USDT", true},
+		{"BTCUSDT", "BTC", "USD", false},
+		{"ETHUSDT", "ETH", "USD", false},
+		{"EURUSD", "BTC", "USD", false},
+		{"BTC", "BTC", "USD", false},
+		{"BTCUSD", "BTC", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.pair+tt.base+tt.quote, func(t *testing.T) {
+			if got := pairMatchesMarket(tt.pair, tt.base, tt.quote); got != tt.want {
+				t.Fatalf("pairMatchesMarket(%q, %q, %q) = %v want %v", tt.pair, tt.base, tt.quote, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPairMatchesKraken(t *testing.T) {
+	tests := []struct {
+		pair  string
+		base  string
+		quote string
+		want  bool
+	}{
+		{"XXBTZUSD", "XBT", "USD", true},
+		{"XETHZUSD", "ETH", "USD", true},
+		{"XXRPZUSD", "XRP", "USD", true},
+		{"XZECZUSD", "ZEC", "USD", true},
+		{"SOLUSD", "SOL", "USD", true},
+		{"AAVEEUR", "AAVE", "EUR", true},
+		{"XBTUSD", "XBT", "USD", true},
+		{"BTCUSD", "XBT", "USD", false},
+		{"XBTUSDT", "XBT", "USD", false},
+		{"XXBTZUSD", "XBT", "JPY", false},
+		{"XETHZUSD", "XBT", "USD", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.pair+tt.base+tt.quote, func(t *testing.T) {
+			if got := pairMatchesKraken(tt.pair, tt.base, tt.quote); got != tt.want {
+				t.Fatalf("pairMatchesKraken(%q, %q, %q) = %v want %v", tt.pair, tt.base, tt.quote, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseKrakenTicker(t *testing.T) {
+	payload := map[string]any{
+		"result": map[string]any{
+			"XXBTZUSD": map[string]any{
+				"b": []any{"50000.0", "1", "2"},
+				"a": []any{"50001.0", "1", "2"},
+			},
+			"XXBTZJPY": map[string]any{
+				"b": []any{"15000000.0", "1", "2"},
+				"a": []any{"15000002.0", "1", "2"},
+			},
+			"XETHZUSD": map[string]any{
+				"b": []any{"3000.0", "1", "2"},
+				"a": []any{"3001.0", "1", "2"},
+			},
+		},
+	}
+
+	if got, ok := parseKrakenTicker(payload, "BTC", USD); !ok || got != 5000050 {
+		t.Fatalf("BTC/USD = (%d, %v) want (5000050, true)", got, ok)
+	}
+
+	if got, ok := parseKrakenTicker(payload, "BTC", JPY); !ok || got != 15000001 {
+		t.Fatalf("BTC/JPY = (%d, %v) want (15000001, true)", got, ok)
+	}
+
+	if got, ok := parseKrakenTicker(payload, "XMR", USD); ok {
+		t.Fatalf("XMR/USD should not be found, got (%d, true)", got)
+	}
+
+	if got, ok := parseKrakenTicker(map[string]any{"result": map[string]any{}}, "BTC", USD); ok {
+		t.Fatalf("BTC/USD on empty result should not be found, got (%d, true)", got)
+	}
+}
+
+func TestParseKrakenTickerWsname(t *testing.T) {
+	// websockets/v2 style payloads expose an exact wsname per row.
+	payload := map[string]any{
+		"result": map[string]any{
+			"XBTUSDX": map[string]any{
+				"wsname": "XBT/USD",
+				"b":      []any{"50000.0", "1", "2"},
+				"a":      []any{"50002.0", "1", "2"},
+			},
+		},
+	}
+
+	if got, ok := parseKrakenTicker(payload, "BTC", USD); !ok || got != 5000100 {
+		t.Fatalf("BTC/USD via wsname = (%d, %v) want (5000100, true)", got, ok)
+	}
+
+	// the wsname is authoritative: an otherwise-matching key is rejected
+	// when the wsname points at a different pair.
+	wrong := map[string]any{
+		"result": map[string]any{
+			"XBTUSD": map[string]any{
+				"wsname": "XBT/JPY",
+				"b":      []any{"50000.0", "1", "2"},
+				"a":      []any{"50002.0", "1", "2"},
+			},
+		},
+	}
+
+	if got, ok := parseKrakenTicker(wrong, "BTC", USD); ok {
+		t.Fatalf("wsname mismatch should not be matched, got (%d, true)", got)
+	}
+}
+
+func TestParseBitflyerTicker(t *testing.T) {
+	payload := map[string]any{
+		"product_code": "BTC_JPY",
+		"best_bid":     15000000.0,
+		"best_ask":     15000002.0,
+	}
+
+	if got, ok := parseBitflyerTicker(payload, "BTC", JPY); !ok || got != 15000001 {
+		t.Fatalf("BTC/JPY = (%d, %v) want (15000001, true)", got, ok)
+	}
+
+	// currency mismatch must be rejected instead of returning a JPY price
+	if got, ok := parseBitflyerTicker(payload, "BTC", USD); ok {
+		t.Fatalf("BTC/USD should not be served a JPY price, got (%d, true)", got)
+	}
+
+	// asset mismatch must be rejected
+	if got, ok := parseBitflyerTicker(payload, "ETH", JPY); ok {
+		t.Fatalf("ETH/JPY should not be served a BTC price, got (%d, true)", got)
+	}
+}
+
+func TestParseBitpayRates(t *testing.T) {
+	payload := map[string]any{
+		"data": []any{
+			map[string]any{"code": "USD", "name": "US Dollar", "rate": "50000.00"},
+			map[string]any{"code": "EUR", "name": "Euro", "rate": "42000.00"},
+			map[string]any{"code": "BTC", "name": "Bitcoin", "rate": 1},
+		},
+	}
+
+	if got, ok := parseBitpayRates(payload, "BTC", USD); !ok || got != 5000000 {
+		t.Fatalf("BTC/USD = (%d, %v) want (5000000, true)", got, ok)
+	}
+
+	if got, ok := parseBitpayRates(payload, "BTC", EUR); !ok || got != 4200000 {
+		t.Fatalf("BTC/EUR = (%d, %v) want (4200000, true)", got, ok)
+	}
+
+	// bitpay only publishes BTC rates
+	if got, ok := parseBitpayRates(payload, "LTC", USD); ok {
+		t.Fatalf("LTC/USD should not be found, got (%d, true)", got)
+	}
+}
+
+func TestParseCoinmateTicker(t *testing.T) {
+	payload := map[string]any{
+		"error": false,
+		"data": map[string]any{
+			"BTC_EUR": map[string]any{"bid": 50000.0, "ask": 50002.0},
+			"BTC_CZK": map[string]any{"bid": 1000000.0, "ask": 1000002.0},
+		},
+	}
+
+	if got, ok := parseCoinmateTicker(payload, "BTC", EUR); !ok || got != 5000100 {
+		t.Fatalf("BTC/EUR = (%d, %v) want (5000100, true)", got, ok)
+	}
+
+	if got, ok := parseCoinmateTicker(payload, "BTC", Currency{Code: "CZK", Decimals: 2}); !ok || got != 100000100 {
+		t.Fatalf("BTC/CZK = (%d, %v) want (100000100, true)", got, ok)
+	}
+
+	if got, ok := parseCoinmateTicker(payload, "ETH", EUR); ok {
+		t.Fatalf("ETH/EUR should not be found, got (%d, true)", got)
+	}
+}
+
+func TestParseCryptoMarketTicker(t *testing.T) {
+	payload := map[string]any{
+		"BTCARS": map[string]any{"bid": 100.0, "ask": 100.5, "last": 100.1},
+		"BTCCLP": map[string]any{"bid": 1.0, "ask": 1.1, "last": 1.05},
+	}
+
+	if got, ok := parseCryptoMarketTicker(payload, "BTC", Currency{Code: "ARS", Decimals: 2}); !ok || got != 10025 {
+		t.Fatalf("BTC/ARS = (%d, %v) want (10025, true)", got, ok)
+	}
+
+	if got, ok := parseCryptoMarketTicker(payload, "BTC", Currency{Code: "CLP", Decimals: 0}); !ok || got != 1 {
+		t.Fatalf("BTC/CLP = (%d, %v) want (1, true)", got, ok)
+	}
+
+	// cryptomarket does not publish USD pairs
+	if got, ok := parseCryptoMarketTicker(payload, "BTC", USD); ok {
+		t.Fatalf("BTC/USD should not be found, got (%d, true)", got)
+	}
+}
+
 func TestMarketProviderUsesTokenSymbol(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/rates/usdt/price" {
