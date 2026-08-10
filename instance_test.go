@@ -511,6 +511,64 @@ func TestNewInvoiceRejectsZeroPrice(t *testing.T) {
 	}
 }
 
+func TestNewInvoiceRejectsNegativeDecimals(t *testing.T) {
+	instance, err := New(Options{
+		Storage: &InMemoryStorage{},
+		Pricing: []PriceProvider{
+			testingFixedPriceProvider{price: 100},
+		},
+		Chains: []CryptoProvider{
+			&testingFakeCryptoProvider{},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = instance.NewInvoice(t.Context(), InvoiceCreate{
+		Chain:      Chain("test"),
+		AmountFiat: USD.Of(1),
+		Token: Token{
+			Symbol:   "NEG",
+			Contract: "0xneg",
+			Decimals: -2,
+		},
+	})
+
+	if err == nil {
+		t.Fatal("expected error for negative decimals")
+	}
+}
+
+func TestNewInvoiceRejectsExcessiveDecimals(t *testing.T) {
+	instance, err := New(Options{
+		Storage: &InMemoryStorage{},
+		Pricing: []PriceProvider{
+			testingFixedPriceProvider{price: 100},
+		},
+		Chains: []CryptoProvider{
+			&testingFakeCryptoProvider{},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = instance.NewInvoice(t.Context(), InvoiceCreate{
+		Chain:      Chain("test"),
+		AmountFiat: USD.Of(1),
+		Token: Token{
+			Symbol:   "BIG",
+			Contract: "0xbig",
+			Decimals: 100,
+		},
+	})
+
+	if err == nil {
+		t.Fatal("expected error for excessive decimals")
+	}
+}
+
 func TestNewInvoiceAmountPaidNotShared(t *testing.T) {
 	instance, err := New(Options{
 		Storage: &InMemoryStorage{},

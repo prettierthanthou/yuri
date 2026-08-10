@@ -234,6 +234,12 @@ func pricingSymbol(provider CryptoProvider) string {
 
 var ten = big.NewInt(10)
 
+// maxTokenDecimals is the largest accepted value for a token's decimals
+// field in [Instance.NewInvoice]. No chain or token supported by yuri
+// uses more than 18 decimals (Ethereum), so anything above 23 is almost
+// certainly caller error.
+const maxTokenDecimals = 23
+
 func (i *Instance) NewNFTInvoice(ctx context.Context, invoiceCreate InvoiceCreate) (Invoice, error) {
 	chain, ok := i.chains[invoiceCreate.Chain]
 	if !ok {
@@ -299,8 +305,8 @@ func (i *Instance) NewInvoice(ctx context.Context, invoiceCreate InvoiceCreate) 
 		cryptoDecimals = invoiceCreate.Token.Decimals
 	}
 
-	if cryptoDecimals >= 24 {
-		return Invoice{}, fmt.Errorf("token decimals exceeds 24 digits (%d): are you sure this is correct?", cryptoDecimals)
+	if cryptoDecimals < 0 || cryptoDecimals > maxTokenDecimals {
+		return Invoice{}, fmt.Errorf("invalid token decimals %d: expected 0 <= decimals <= %d", cryptoDecimals, maxTokenDecimals)
 	}
 
 	fiat := big.NewInt(invoiceCreate.AmountFiat.Minor)
