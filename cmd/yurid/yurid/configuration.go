@@ -30,13 +30,24 @@ const exampleUsage = `yurid \
 	-database-dsn postgresql://root:toor@localhost/yurid
 `
 
+var supportedChainNames = []yuri.Chain{
+	yuri.Bitcoin,
+	yuri.Litecoin,
+	yuri.Ethereum,
+	yuri.BNB,
+	yuri.Monero,
+	// NOTE: TON and SOL are handled explicitly in ParseConfig as they
+	// require a wallet output directory
+	yuri.Ton,
+	yuri.Solana,
+}
+
 var supportedChains = map[yuri.Chain]func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider{
 	yuri.Bitcoin:  func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewBitcoin(rpc) },
 	yuri.Litecoin: func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewLitecoin(rpc) },
 	yuri.Ethereum: func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewEthereum(rpc) },
 	yuri.BNB:      func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewBNB(rpc) },
 	yuri.Monero:   func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewMonero(rpc) },
-	// NOTE: TON and SOL are not here as they require explicit handling
 }
 
 var supportedPricingProviders map[string]func(c *http.Client) yuri.PriceProvider = map[string]func(c *http.Client) yuri.PriceProvider{
@@ -151,7 +162,7 @@ func ParseConfig() (Configuration, error) {
 
 	chainConfigs := make(map[yuri.Chain]*CryptoConfiguration)
 
-	for chain := range supportedChains {
+	for _, chain := range supportedChainNames {
 		cfg := &CryptoConfiguration{}
 		chainConfigs[chain] = cfg
 
@@ -162,7 +173,7 @@ func ParseConfig() (Configuration, error) {
 		fs.StringVar(&cfg.Password, prefix+"-password", "", "JSON-RPC password")
 		fs.StringVar(&cfg.Proxy, prefix+"-proxy", "", "SOCKS5 proxy")
 
-		if chain == yuri.Solana {
+		if chain == yuri.Solana || chain == yuri.Ton {
 			fs.StringVar(&cfg.walletOutDir, prefix+"-wallet-dir", "", "output directory for wallets")
 		}
 	}
@@ -319,12 +330,19 @@ func (c CryptoConfiguration) Enabled() bool {
 	return c.Host != "" ||
 		c.Username != "" ||
 		c.Password != "" ||
-		c.Proxy != ""
+		c.Proxy != "" ||
+		c.walletOutDir != ""
 }
 
 func (c CryptoConfiguration) Validate(chain yuri.Chain) error {
 	switch {
 	case !c.Enabled():
+		return nil
+	case chain == yuri.Ton:
+		// TON defaults to the public mainnet config, host is optional
+		if c.walletOutDir == "" {
+			return fmt.Errorf("%s: wallet-dir is required", chain)
+		}
 		return nil
 	case c.Host == "":
 		return fmt.Errorf("%s: host is required", chain)
