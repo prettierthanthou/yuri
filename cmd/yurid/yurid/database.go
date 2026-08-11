@@ -243,31 +243,31 @@ func (d *database) GetActiveInvoices(ctx context.Context, chain yuri.Chain) ([]y
 	now := time.Now()
 
 	for rows.Next() {
-	var (
-		id            string
-		chainStr      string
-		address       string
-		amountOwedStr string
-		amountPaidStr string
-		tokenStr      string
-		metadataStr   string
-		pending       bool
-		expiresAt     sql.NullTime
-	)
+		var (
+			id            string
+			chainStr      string
+			address       string
+			amountOwedStr string
+			amountPaidStr string
+			tokenStr      string
+			metadataStr   string
+			pending       bool
+			expiresAt     sql.NullTime
+		)
 
-	if err := rows.Scan(
-		&id,
-		&chainStr,
-		&address,
-		&amountOwedStr,
-		&amountPaidStr,
-		&tokenStr,
-		&metadataStr,
-		&pending,
-		&expiresAt,
-	); err != nil {
-		return nil, err
-	}
+		if err := rows.Scan(
+			&id,
+			&chainStr,
+			&address,
+			&amountOwedStr,
+			&amountPaidStr,
+			&tokenStr,
+			&metadataStr,
+			&pending,
+			&expiresAt,
+		); err != nil {
+			return nil, err
+		}
 
 		// NULL expiry means the invoice never expires
 		if expiresAt.Valid && expiresAt.Time.Before(now) {
