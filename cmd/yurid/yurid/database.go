@@ -284,7 +284,7 @@ func (d *database) GetActiveInvoices(ctx context.Context, chain yuri.Chain) ([]y
 			return nil, fmt.Errorf("failed to parse amount paid")
 		}
 
-		if !pending && amountPaid.Cmp(amountPaid) >= 0 {
+		if !pending && amountPaid.Cmp(amountOwed) >= 0 {
 			continue
 		}
 
