@@ -46,7 +46,12 @@ type database struct {
 }
 
 func NewDatabase(conf DatabaseConfig) (*database, error) {
-	db, err := sql.Open(string(conf.Type), conf.DSN)
+	typ := string(conf.Type)
+	if conf.Type == DatabaseTypePostgres {
+		typ = "pgx"
+	}
+
+	db, err := sql.Open(string(typ), conf.DSN)
 	if err != nil {
 		return nil, err
 	}
