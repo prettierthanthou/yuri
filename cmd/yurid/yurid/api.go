@@ -2,6 +2,7 @@ package yurid
 
 import (
 	"context"
+	"crypto/subtle"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -22,15 +23,17 @@ type API struct {
 	instance         *yuri.Instance
 	mux              *http.ServeMux
 	activeChainNames []string
+	apiToken         string
 }
 
-func NewAPI(addr string, database Database, instance *yuri.Instance, activeChainNames []string) *API {
+func NewAPI(addr string, database Database, instance *yuri.Instance, activeChainNames []string, apiToken string) *API {
 	api := &API{
 		addr:             addr,
 		storage:          database,
 		instance:         instance,
 		mux:              http.NewServeMux(),
 		activeChainNames: activeChainNames,
+		apiToken:         apiToken,
 	}
 
 	api.routes()
@@ -54,10 +57,26 @@ func (a *API) ListenAndServe() error {
 }
 
 func (a *API) routes() {
-	a.mux.HandleFunc("/sample", a.handleSample)
-	a.mux.HandleFunc("/active", a.handleActive)
-	a.mux.HandleFunc("/get", a.handleGet)
-	a.mux.HandleFunc("/new", a.handleNew)
+	a.mux.HandleFunc("/sample", a.requireAuth(a.handleSample))
+	a.mux.HandleFunc("/active", a.requireAuth(a.handleActive))
+	a.mux.HandleFunc("/get", a.requireAuth(a.handleGet))
+	a.mux.HandleFunc("/new", a.requireAuth(a.handleNew))
+}
+
+// requireAuth enforces the configured bearer token, if any.
+func (a *API) requireAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if a.apiToken != "" {
+			header := r.Header.Get("Authorization")
+			token, ok := strings.CutPrefix(header, "Bearer ")
+			if !ok || subtle.ConstantTimeCompare([]byte(token), []byte(a.apiToken)) != 1 {
+				writeError(w, http.StatusUnauthorized, "unauthorized", nil)
+				return
+			}
+		}
+
+		next(w, r)
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

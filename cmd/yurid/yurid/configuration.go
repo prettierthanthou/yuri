@@ -88,6 +88,7 @@ type Configuration struct {
 	Chains           []yuri.CryptoProvider
 	PricingProviders []yuri.PriceProvider
 	DatabaseConfig   DatabaseConfig
+	APIToken         string
 }
 
 type pricingProviderSliceFlag []string
@@ -152,6 +153,9 @@ func ParseConfig() (Configuration, error) {
 
 	var addr string
 	fs.StringVar(&addr, "addr", ":6761", "address to bind to")
+
+	var apiToken string
+	fs.StringVar(&apiToken, "api-token", "", "optional bearer token required by the REST API")
 
 	var globalProxy string
 	fs.StringVar(
@@ -317,6 +321,7 @@ func ParseConfig() (Configuration, error) {
 	}
 
 	out.Addr = addr
+	out.APIToken = apiToken
 
 	dbTypLower := strings.ToLower(databaseType)
 	if dbTypLower != string(DatabaseTypeMysql) && dbTypLower != string(DatabaseTypePostgres) && dbTypLower != string(DatabaseTypeSqlite) {

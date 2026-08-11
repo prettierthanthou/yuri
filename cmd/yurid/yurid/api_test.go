@@ -56,7 +56,7 @@ func TestSample(t *testing.T) {
 		t.Fatalf("instance = %+v", err)
 	}
 
-	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)})
+	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)}, "")
 	req := httptest.NewRequest("GET", yuridTestUrl+"/sample", nil)
 	w := httptest.NewRecorder()
 
@@ -89,7 +89,7 @@ func TestGet_RequiresGetMethod(t *testing.T) {
 	}
 
 	log.SetOutput(io.Discard)
-	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)})
+	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)}, "")
 	req := httptest.NewRequest("POST", yuridTestUrl+"/get", nil)
 	w := httptest.NewRecorder()
 
@@ -116,7 +116,7 @@ func TestGet_MissingId(t *testing.T) {
 	}
 
 	log.SetOutput(io.Discard)
-	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)})
+	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)}, "")
 	req := httptest.NewRequest("GET", yuridTestUrl+"/get", nil)
 	w := httptest.NewRecorder()
 
@@ -157,7 +157,7 @@ func TestGet_NoExistingRecord(t *testing.T) {
 		t.Fatalf("failed to create v7 uuid for testing: %+v", err)
 	}
 
-	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)})
+	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)}, "")
 	req := httptest.NewRequest("GET", fmt.Sprintf(yuridTestUrl+"/get?id=%s", id.String()), nil)
 	w := httptest.NewRecorder()
 
@@ -192,7 +192,7 @@ func TestNew_InvalidMethod(t *testing.T) {
 		t.Fatalf("instance = %+v", err)
 	}
 
-	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)})
+	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)}, "")
 	req := httptest.NewRequest("GET", yuridTestUrl+"/new", nil)
 	w := httptest.NewRecorder()
 
@@ -218,7 +218,7 @@ func TestNew_InvalidJsonBody(t *testing.T) {
 		t.Fatalf("instance = %+v", err)
 	}
 
-	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)})
+	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)}, "")
 	body, _ := json.Marshal(map[string]any{"blahhh": "hahaha"})
 	req := httptest.NewRequest("POST", yuridTestUrl+"/new", bytes.NewReader(body))
 	w := httptest.NewRecorder()
@@ -247,7 +247,7 @@ func TestNew_InvalidBody(t *testing.T) {
 		t.Fatalf("instance = %+v", err)
 	}
 
-	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)})
+	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)}, "")
 	req := httptest.NewRequest("POST", yuridTestUrl+"/new", bytes.NewReader([]byte("waqfvwae")))
 	w := httptest.NewRecorder()
 
@@ -275,7 +275,7 @@ func TestNew_InvalidFiatAmount(t *testing.T) {
 		t.Fatalf("instance = %+v", err)
 	}
 
-	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)})
+	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)}, "")
 	body, _ := json.Marshal(WrappedInvoiceCreate{
 		InvoiceCreate: yuri.InvoiceCreate{
 			Chain:      yuri.Ethereum,
@@ -312,7 +312,7 @@ func TestNew_InvalidFiatAmountNegative(t *testing.T) {
 		t.Fatalf("instance = %+v", err)
 	}
 
-	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)})
+	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)}, "")
 	body, _ := json.Marshal(WrappedInvoiceCreate{
 		InvoiceCreate: yuri.InvoiceCreate{
 			Chain:      yuri.Ethereum,
@@ -349,7 +349,7 @@ func TestNew_NoMetadataRegression(t *testing.T) {
 		t.Fatalf("instance = %+v", err)
 	}
 
-	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)})
+	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)}, "")
 	body, _ := json.Marshal(WrappedInvoiceCreate{
 		InvoiceCreate: yuri.InvoiceCreate{
 			Chain:      yuri.Ethereum,
@@ -374,4 +374,66 @@ func TestNew_NoMetadataRegression(t *testing.T) {
 
 	const expectedBody = `{"detail":"failed to create address for invoice: err = Post \"\": unsupported protocol scheme \"\" invoice = {Chain:ethereum Token:{Symbol: Contract: Decimals:0} AmountFiat:{Currency:{Code:EUR Decimals:2} Minor:500} Metadata:map[yurid-fiat-hist:{Currency:{Code:EUR Decimals:2} Minor:500}]}","error":"failed to create invoice"}`
 	jsonCompare(t, b, []byte(expectedBody))
+}
+
+func TestAuth_RejectsMissingToken(t *testing.T) {
+	db, err := NewDatabase(DatabaseConfig{Type: DatabaseTypeSqlite, DSN: ":memory:"})
+	if err != nil {
+		t.Fatalf("database = %+v", err)
+	}
+
+	instance, err := yuri.New(yuri.Options{
+		Pricing:         []yuri.PriceProvider{yuri.NewStaticPriceProvider(1)},
+		Chains:          []yuri.CryptoProvider{yuri.NewEthereum(yuri.JsonRpcClientConfig{})},
+		PriceAggregator: yuri.MedianPriceAggregator{},
+		Storage:         db,
+	})
+	if err != nil {
+		t.Fatalf("instance = %+v", err)
+	}
+
+	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)}, "sekrit")
+	req := httptest.NewRequest("GET", yuridTestUrl+"/sample", nil)
+	w := httptest.NewRecorder()
+
+	api.Handler().ServeHTTP(w, req)
+	if w.Result().StatusCode != 401 {
+		t.Fatalf("StatusCode = %d expected = 401", w.Result().StatusCode)
+	}
+
+	req = httptest.NewRequest("GET", yuridTestUrl+"/sample", nil)
+	req.Header.Set("Authorization", "Bearer wrong")
+	w = httptest.NewRecorder()
+
+	api.Handler().ServeHTTP(w, req)
+	if w.Result().StatusCode != 401 {
+		t.Fatalf("StatusCode = %d expected = 401", w.Result().StatusCode)
+	}
+}
+
+func TestAuth_AcceptsToken(t *testing.T) {
+	db, err := NewDatabase(DatabaseConfig{Type: DatabaseTypeSqlite, DSN: ":memory:"})
+	if err != nil {
+		t.Fatalf("database = %+v", err)
+	}
+
+	instance, err := yuri.New(yuri.Options{
+		Pricing:         []yuri.PriceProvider{yuri.NewStaticPriceProvider(1)},
+		Chains:          []yuri.CryptoProvider{yuri.NewEthereum(yuri.JsonRpcClientConfig{})},
+		PriceAggregator: yuri.MedianPriceAggregator{},
+		Storage:         db,
+	})
+	if err != nil {
+		t.Fatalf("instance = %+v", err)
+	}
+
+	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)}, "sekrit")
+	req := httptest.NewRequest("GET", yuridTestUrl+"/sample", nil)
+	req.Header.Set("Authorization", "Bearer sekrit")
+	w := httptest.NewRecorder()
+
+	api.Handler().ServeHTTP(w, req)
+	if w.Result().StatusCode != 200 {
+		t.Fatalf("StatusCode = %d expected = 200", w.Result().StatusCode)
+	}
 }

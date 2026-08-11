@@ -77,7 +77,7 @@ func main() {
 		activeChainNames = append(activeChainNames, string(chain.Chain()))
 	}
 
-	api := yurid.NewAPI(conf.Addr, database, instance, activeChainNames)
+	api := yurid.NewAPI(conf.Addr, database, instance, activeChainNames, conf.APIToken)
 
 	srv := &http.Server{
 		Addr:              conf.Addr,
