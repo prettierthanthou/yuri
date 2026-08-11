@@ -163,20 +163,20 @@ func (a *API) handleActive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	foundChain := false
+	foundChain := ""
 	for _, activeChain := range a.activeChainNames {
 		if strings.EqualFold(activeChain, chainStr) {
-			foundChain = true
+			foundChain = chainStr
 			break
 		}
 	}
 
-	if !foundChain {
+	if foundChain == "" {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("chain %s is not registered", chainStr), nil)
 		return
 	}
 
-	chain := yuri.Chain(chainStr)
+	chain := yuri.Chain(foundChain)
 
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
