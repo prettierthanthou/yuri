@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math/big"
+	"strings"
 	"time"
 
 	"codeberg.org/lewdest/yuri"
@@ -42,7 +43,8 @@ type Database interface {
 }
 
 type database struct {
-	db *sql.DB
+	conf DatabaseConfig
+	db   *sql.DB
 }
 
 func NewDatabase(conf DatabaseConfig) (*database, error) {
@@ -51,12 +53,12 @@ func NewDatabase(conf DatabaseConfig) (*database, error) {
 		typ = "pgx"
 	}
 
-	db, err := sql.Open(string(typ), conf.DSN)
+	db, err := sql.Open(typ, conf.DSN)
 	if err != nil {
 		return nil, err
 	}
 
-	database := &database{db: db}
+	database := &database{conf: conf, db: db}
 	if err := database.ensureSchema(); err != nil {
 		return nil, err
 	}
@@ -64,12 +66,76 @@ func NewDatabase(conf DatabaseConfig) (*database, error) {
 	return database, nil
 }
 
+// quoteIdent quotes an identifier using the configured dialect.
+func (d *database) quoteIdent(name string) string {
+	if d.conf.Type == DatabaseTypeMysql {
+		return "`" + name + "`"
+	}
+	return `"` + name + `"`
+}
+
+// rewrite adapts a statement written with double-quoted identifiers and `?`
+// placeholders to the configured dialect. MySQL uses backticks for
+// identifiers, and pgx (PostgreSQL) only understands $n placeholders.
+func (d *database) rewrite(stmt string) string {
+	if d.conf.Type == DatabaseTypePostgres {
+		var b strings.Builder
+		arg := 0
+		for i := 0; i < len(stmt); i++ {
+			if stmt[i] == '?' {
+				arg++
+				fmt.Fprintf(&b, "$%d", arg)
+			} else {
+				b.WriteByte(stmt[i])
+			}
+		}
+		stmt = b.String()
+	}
+
+	if d.conf.Type == DatabaseTypeMysql {
+		stmt = strings.ReplaceAll(stmt, `"`, "`")
+	}
+
+	return stmt
+}
+
+// upsertClause renders the conflict-resolution clause for the configured
+// dialect. uniqueCols identifies the conflict target and updateCols lists
+// the columns to overwrite on conflict.
+func (d *database) upsertClause(uniqueCols, updateCols []string) string {
+	assignments := make([]string, len(updateCols))
+	for i, col := range updateCols {
+		quoted := d.quoteIdent(col)
+		if d.conf.Type == DatabaseTypeMysql {
+			assignments[i] = fmt.Sprintf("%s = values(%s)", quoted, quoted)
+		} else {
+			assignments[i] = fmt.Sprintf("%s = excluded.%s", quoted, quoted)
+		}
+	}
+
+	joined := strings.Join(assignments, ", ")
+	if d.conf.Type == DatabaseTypeMysql {
+		return "on duplicate key update " + joined
+	}
+
+	quotedUnique := make([]string, len(uniqueCols))
+	for i, col := range uniqueCols {
+		quotedUnique[i] = d.quoteIdent(col)
+	}
+
+	return fmt.Sprintf(
+		"on conflict (%s) do update set %s",
+		strings.Join(quotedUnique, ", "),
+		joined,
+	)
+}
+
 func (d *database) Close() error {
 	return d.db.Close()
 }
 
 func (d *database) ensureSchema() error {
-	_, err := d.db.Exec(`
+	_, err := d.db.Exec(d.rewrite(`
 	create table if not exists "invoice" (
 		id TEXT NOT NULL PRIMARY KEY,
 		chain TEXT NOT NULL,
@@ -82,16 +148,16 @@ func (d *database) ensureSchema() error {
 
 		UNIQUE(chain, address)
 	)
-	`)
+	`))
 	return err
 }
 
 func (d *database) GetInvoiceByID(ctx context.Context, id string) (*yuri.Invoice, error) {
-	row := d.db.QueryRowContext(ctx, `
+	row := d.db.QueryRowContext(ctx, d.rewrite(`
 		select chain, address, amount_owed, amount_paid, token, metadata, expires_at
-		from invoice
+		from "invoice"
 		where id = ?
-	`, id)
+	`), id)
 
 	var (
 		chainStr  string
@@ -147,12 +213,12 @@ func (d *database) GetInvoiceByID(ctx context.Context, id string) (*yuri.Invoice
 
 // GetActiveInvoices implements [yuri.Storage].
 func (d *database) GetActiveInvoices(ctx context.Context, chain yuri.Chain) ([]yuri.Invoice, error) {
-	rows, err := d.db.QueryContext(ctx, `
+	rows, err := d.db.QueryContext(ctx, d.rewrite(`
 		select id, chain, address, amount_owed, amount_paid, token, metadata, expires_at
 		from "invoice"
 		where chain = ?
 		  and (expires_at IS NULL or expires_at > CURRENT_TIMESTAMP)
-	`, chain)
+	`), chain)
 	if err != nil {
 		return nil, fmt.Errorf("querying active invoices failed: %+v", err)
 	}
@@ -238,18 +304,18 @@ func (d *database) NewInvoiceWithExpirey(ctx context.Context, inv yuri.Invoice, 
 		return uuid.Nil, fmt.Errorf("token: %w", err)
 	}
 
-	_, err = d.db.ExecContext(ctx, `
+	conflict := d.upsertClause(
+		[]string{"chain", "address"},
+		[]string{"amount_owed", "amount_paid", "token", "metadata", "expires_at"},
+	)
+
+	_, err = d.db.ExecContext(ctx, d.rewrite(fmt.Sprintf(`
 		insert into "invoice"
 			(id, chain, address, amount_owed, amount_paid, token, metadata, expires_at)
 		values
 			(?, ?, ?, ?, ?, ?, ?, ?)
-		on conflict(chain, address) do update set
-			amount_owed = excluded.amount_owed,
-			amount_paid = excluded.amount_paid,
-			token = excluded.token,
-			metadata = excluded.metadata,
-			expires_at = excluded.expires_at
-	`,
+		%s
+	`, conflict)),
 		id,
 		inv.Chain,
 		inv.Address,
@@ -290,17 +356,18 @@ func (d *database) UpdateInvoices(ctx context.Context, invoices []yuri.Invoice) 
 		_ = tx.Rollback()
 	}()
 
-	stmt, err := tx.PrepareContext(ctx, `
+	conflict := d.upsertClause(
+		[]string{"chain", "address"},
+		[]string{"amount_owed", "amount_paid", "token", "metadata"},
+	)
+
+	stmt, err := tx.PrepareContext(ctx, d.rewrite(fmt.Sprintf(`
 		insert into "invoice"
 			(id, chain, address, amount_owed, amount_paid, token, metadata)
 		values
 			(?, ?, ?, ?, ?, ?, ?)
-		on conflict(chain, address) do update set
-			amount_owed = excluded.amount_owed,
-			amount_paid = excluded.amount_paid,
-			token = excluded.token,
-			metadata = excluded.metadata
-	`)
+		%s
+	`, conflict)))
 	if err != nil {
 		return err
 	}
