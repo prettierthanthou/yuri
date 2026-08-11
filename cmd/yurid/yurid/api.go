@@ -93,7 +93,7 @@ func writeError(w http.ResponseWriter, status int, msg string, err error) {
 		resp["detail"] = err.Error()
 	}
 
-	slog.Error("occuried during a request", "err", resp)
+	slog.Error("occurred during a request", "err", resp)
 	writeJSON(w, status, resp)
 }
 
@@ -183,11 +183,6 @@ func (a *API) handleActive(w http.ResponseWriter, r *http.Request) {
 
 	activeInvoices, err := a.storage.GetActiveInvoices(ctx, chain)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeJSON(w, http.StatusOK, []yuri.Invoice{})
-			return
-		}
-
 		writeError(w, http.StatusInternalServerError, "failed to fetch invoices", err)
 		return
 	}
