@@ -74,9 +74,7 @@ func (d *database) quoteIdent(name string) string {
 	return `"` + name + `"`
 }
 
-// rewrite adapts a statement written with double-quoted identifiers and `?`
-// placeholders to the configured dialect. MySQL uses backticks for
-// identifiers, and pgx (PostgreSQL) only understands $n placeholders.
+// rewrite adapts double-quoted identifiers and `?` placeholders to the dialect.
 func (d *database) rewrite(stmt string) string {
 	if d.conf.Type == DatabaseTypePostgres {
 		var b strings.Builder
@@ -99,9 +97,7 @@ func (d *database) rewrite(stmt string) string {
 	return stmt
 }
 
-// upsertClause renders the conflict-resolution clause for the configured
-// dialect. uniqueCols identifies the conflict target and updateCols lists
-// the columns to overwrite on conflict.
+// upsertClause renders the conflict-resolution clause for the dialect.
 func (d *database) upsertClause(uniqueCols, updateCols []string) string {
 	assignments := make([]string, len(updateCols))
 	for i, col := range updateCols {
@@ -144,17 +140,32 @@ func (d *database) ensureSchema() error {
 		amount_paid TEXT NOT NULL,
 		token TEXT NOT NULL,
 		metadata TEXT NOT NULL,
+		pending BOOLEAN NOT NULL DEFAULT FALSE,
 		expires_at TIMESTAMP,
 
 		UNIQUE(chain, address)
 	)
 	`))
-	return err
+	if err != nil {
+		return err
+	}
+
+	// migrate databases created before pending was tracked
+	if _, err := d.db.Exec(d.rewrite(`
+		alter table "invoice" add column pending BOOLEAN NOT NULL DEFAULT FALSE
+	`)); err != nil {
+		msg := strings.ToLower(err.Error())
+		if !strings.Contains(msg, "duplicate column") && !strings.Contains(msg, "already exists") {
+			return fmt.Errorf("migrating pending column: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func (d *database) GetInvoiceByID(ctx context.Context, id string) (*yuri.Invoice, error) {
 	row := d.db.QueryRowContext(ctx, d.rewrite(`
-		select chain, address, amount_owed, amount_paid, token, metadata, expires_at
+		select chain, address, amount_owed, amount_paid, token, metadata, pending, expires_at
 		from "invoice"
 		where id = ?
 	`), id)
@@ -166,6 +177,7 @@ func (d *database) GetInvoiceByID(ctx context.Context, id string) (*yuri.Invoice
 		paidStr   string
 		tokenStr  string
 		metaStr   string
+		pending   bool
 		expiresAt sql.NullTime
 	)
 
@@ -176,6 +188,7 @@ func (d *database) GetInvoiceByID(ctx context.Context, id string) (*yuri.Invoice
 		&paidStr,
 		&tokenStr,
 		&metaStr,
+		&pending,
 		&expiresAt,
 	); err != nil {
 		return nil, err
@@ -207,6 +220,7 @@ func (d *database) GetInvoiceByID(ctx context.Context, id string) (*yuri.Invoice
 		AmountOwed: owed,
 		AmountPaid: paid,
 		Token:      token,
+		Pending:    pending,
 		Metadata:   metadata,
 	}, nil
 }
@@ -214,7 +228,7 @@ func (d *database) GetInvoiceByID(ctx context.Context, id string) (*yuri.Invoice
 // GetActiveInvoices implements [yuri.Storage].
 func (d *database) GetActiveInvoices(ctx context.Context, chain yuri.Chain) ([]yuri.Invoice, error) {
 	rows, err := d.db.QueryContext(ctx, d.rewrite(`
-		select id, chain, address, amount_owed, amount_paid, token, metadata, expires_at
+		select id, chain, address, amount_owed, amount_paid, token, metadata, pending, expires_at
 		from "invoice"
 		where chain = ?
 	`), chain)
@@ -229,33 +243,33 @@ func (d *database) GetActiveInvoices(ctx context.Context, chain yuri.Chain) ([]y
 	now := time.Now()
 
 	for rows.Next() {
-		var (
-			id            string
-			chainStr      string
-			address       string
-			amountOwedStr string
-			amountPaidStr string
-			tokenStr      string
-			metadataStr   string
-			expiresAt     sql.NullTime
-		)
+	var (
+		id            string
+		chainStr      string
+		address       string
+		amountOwedStr string
+		amountPaidStr string
+		tokenStr      string
+		metadataStr   string
+		pending       bool
+		expiresAt     sql.NullTime
+	)
 
-		if err := rows.Scan(
-			&id,
-			&chainStr,
-			&address,
-			&amountOwedStr,
-			&amountPaidStr,
-			&tokenStr,
-			&metadataStr,
-			&expiresAt,
-		); err != nil {
-			return nil, err
-		}
+	if err := rows.Scan(
+		&id,
+		&chainStr,
+		&address,
+		&amountOwedStr,
+		&amountPaidStr,
+		&tokenStr,
+		&metadataStr,
+		&pending,
+		&expiresAt,
+	); err != nil {
+		return nil, err
+	}
 
-		// Filtering on expiry in SQL is unreliable: expiry values are
-		// stored in dialect-specific formats and NULLs do not scan into
-		// time.Time. A NULL expiry means the invoice never expires.
+		// NULL expiry means the invoice never expires
 		if expiresAt.Valid && expiresAt.Time.Before(now) {
 			continue
 		}
@@ -287,6 +301,7 @@ func (d *database) GetActiveInvoices(ctx context.Context, chain yuri.Chain) ([]y
 			AmountOwed: amountOwed,
 			AmountPaid: amountPaid,
 			Token:      token,
+			Pending:    pending,
 			Metadata:   metadata,
 		})
 	}
@@ -313,14 +328,14 @@ func (d *database) NewInvoiceWithExpirey(ctx context.Context, inv yuri.Invoice, 
 
 	conflict := d.upsertClause(
 		[]string{"chain", "address"},
-		[]string{"amount_owed", "amount_paid", "token", "metadata", "expires_at"},
+		[]string{"amount_owed", "amount_paid", "token", "metadata", "pending", "expires_at"},
 	)
 
 	_, err = d.db.ExecContext(ctx, d.rewrite(fmt.Sprintf(`
 		insert into "invoice"
-			(id, chain, address, amount_owed, amount_paid, token, metadata, expires_at)
+			(id, chain, address, amount_owed, amount_paid, token, metadata, pending, expires_at)
 		values
-			(?, ?, ?, ?, ?, ?, ?, ?)
+			(?, ?, ?, ?, ?, ?, ?, ?, ?)
 		%s
 	`, conflict)),
 		id,
@@ -330,6 +345,7 @@ func (d *database) NewInvoiceWithExpirey(ctx context.Context, inv yuri.Invoice, 
 		inv.AmountPaid.String(),
 		tokenJSON,
 		metaJSON,
+		inv.Pending,
 		expiresAt,
 	)
 
@@ -365,14 +381,14 @@ func (d *database) UpdateInvoices(ctx context.Context, invoices []yuri.Invoice) 
 
 	conflict := d.upsertClause(
 		[]string{"chain", "address"},
-		[]string{"amount_owed", "amount_paid", "token", "metadata"},
+		[]string{"amount_owed", "amount_paid", "token", "metadata", "pending"},
 	)
 
 	stmt, err := tx.PrepareContext(ctx, d.rewrite(fmt.Sprintf(`
 		insert into "invoice"
-			(id, chain, address, amount_owed, amount_paid, token, metadata)
+			(id, chain, address, amount_owed, amount_paid, token, metadata, pending)
 		values
-			(?, ?, ?, ?, ?, ?, ?)
+			(?, ?, ?, ?, ?, ?, ?, ?)
 		%s
 	`, conflict)))
 	if err != nil {
@@ -407,6 +423,7 @@ func (d *database) UpdateInvoices(ctx context.Context, invoices []yuri.Invoice) 
 			inv.AmountPaid.String(),
 			tokenJSON,
 			metaJSON,
+			inv.Pending,
 		)
 		if err != nil {
 			return err
