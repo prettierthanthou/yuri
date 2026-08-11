@@ -166,7 +166,7 @@ func (d *database) GetInvoiceByID(ctx context.Context, id string) (*yuri.Invoice
 		paidStr   string
 		tokenStr  string
 		metaStr   string
-		expiresAt time.Time
+		expiresAt sql.NullTime
 	)
 
 	if err := row.Scan(
@@ -217,7 +217,6 @@ func (d *database) GetActiveInvoices(ctx context.Context, chain yuri.Chain) ([]y
 		select id, chain, address, amount_owed, amount_paid, token, metadata, expires_at
 		from "invoice"
 		where chain = ?
-		  and (expires_at IS NULL or expires_at > CURRENT_TIMESTAMP)
 	`), chain)
 	if err != nil {
 		return nil, fmt.Errorf("querying active invoices failed: %+v", err)
@@ -227,6 +226,7 @@ func (d *database) GetActiveInvoices(ctx context.Context, chain yuri.Chain) ([]y
 	}()
 
 	var collectedInvoices []yuri.Invoice
+	now := time.Now()
 
 	for rows.Next() {
 		var (
@@ -237,7 +237,7 @@ func (d *database) GetActiveInvoices(ctx context.Context, chain yuri.Chain) ([]y
 			amountPaidStr string
 			tokenStr      string
 			metadataStr   string
-			expiresAt     time.Time
+			expiresAt     sql.NullTime
 		)
 
 		if err := rows.Scan(
@@ -251,6 +251,13 @@ func (d *database) GetActiveInvoices(ctx context.Context, chain yuri.Chain) ([]y
 			&expiresAt,
 		); err != nil {
 			return nil, err
+		}
+
+		// Filtering on expiry in SQL is unreliable: expiry values are
+		// stored in dialect-specific formats and NULLs do not scan into
+		// time.Time. A NULL expiry means the invoice never expires.
+		if expiresAt.Valid && expiresAt.Time.Before(now) {
+			continue
 		}
 
 		amountOwed := new(big.Int)
