@@ -328,7 +328,7 @@ func (d *database) NewInvoiceWithExpirey(ctx context.Context, inv yuri.Invoice, 
 
 	conflict := d.upsertClause(
 		[]string{"chain", "address"},
-		[]string{"amount_owed", "amount_paid", "token", "metadata", "pending", "expires_at"},
+		[]string{"id", "amount_owed", "amount_paid", "token", "metadata", "pending", "expires_at"},
 	)
 
 	_, err = d.db.ExecContext(ctx, d.rewrite(fmt.Sprintf(`
@@ -381,7 +381,7 @@ func (d *database) UpdateInvoices(ctx context.Context, invoices []yuri.Invoice) 
 
 	conflict := d.upsertClause(
 		[]string{"chain", "address"},
-		[]string{"amount_owed", "amount_paid", "token", "metadata", "pending"},
+		[]string{"id", "amount_owed", "amount_paid", "token", "metadata", "pending"},
 	)
 
 	stmt, err := tx.PrepareContext(ctx, d.rewrite(fmt.Sprintf(`
