@@ -2,16 +2,18 @@ package yurid
 
 import (
 	"bytes"
+	"codeberg.org/lewdest/yuri"
+	_ "database/sql"
 	"encoding/json"
 	"fmt"
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/google/uuid"
+	_ "modernc.org/sqlite"
 	"io"
 	"log"
 	"net/http/httptest"
 	"reflect"
 	"testing"
-
-	"codeberg.org/lewdest/yuri"
-	"github.com/google/uuid"
 )
 
 const yuridTestAddr = ":6761"
@@ -370,6 +372,6 @@ func TestNew_NoMetadataRegression(t *testing.T) {
 		t.Fatalf("StatusCode = %d expected = 500", w.Result().StatusCode)
 	}
 
-	const expectedBody = `{"detail":"Failed to create address for invoice: err = Post \"\": unsupported protocol scheme \"\" invoice = {Chain:ethereum Token:{Symbol: Contract: Decimals:0} AmountFiat:{Currency:{Code:EUR Decimals:2} Minor:500} Metadata:map[yurid-fiat-hist:{Currency:{Code:EUR Decimals:2} Minor:500}]}","error":"failed to create invoice"}`
+	const expectedBody = `{"detail":"failed to create address for invoice: err = Post \"\": unsupported protocol scheme \"\" invoice = {Chain:ethereum Token:{Symbol: Contract: Decimals:0} AmountFiat:{Currency:{Code:EUR Decimals:2} Minor:500} Metadata:map[yurid-fiat-hist:{Currency:{Code:EUR Decimals:2} Minor:500}]}","error":"failed to create invoice"}`
 	jsonCompare(t, b, []byte(expectedBody))
 }
