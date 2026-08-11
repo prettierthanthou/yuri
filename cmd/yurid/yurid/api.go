@@ -79,12 +79,19 @@ func writeError(w http.ResponseWriter, status int, msg string, err error) {
 }
 
 func decodeJSON(r *http.Request, dst any) error {
-	body, err := io.ReadAll(r.Body)
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxRequestBodySize+1))
 	if err != nil {
 		return err
 	}
+
+	if len(body) > maxRequestBodySize {
+		return errors.New("request body too large")
+	}
+
 	return json.Unmarshal(body, dst)
 }
+
+const maxRequestBodySize = 1 << 20 // 1 MiB
 
 type wrappedInvoice struct {
 	Id   string `json:"id"`
@@ -199,6 +206,19 @@ func (a *API) handleNew(w http.ResponseWriter, r *http.Request) {
 	var req WrappedInvoiceCreate
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body", err)
+		return
+	}
+
+	registeredChain := false
+	for _, activeChain := range a.activeChainNames {
+		if strings.EqualFold(activeChain, string(req.Chain)) {
+			registeredChain = true
+			break
+		}
+	}
+
+	if !registeredChain {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("chain %s is not registered", req.Chain), nil)
 		return
 	}
 
