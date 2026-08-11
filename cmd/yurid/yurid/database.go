@@ -284,6 +284,10 @@ func (d *database) GetActiveInvoices(ctx context.Context, chain yuri.Chain) ([]y
 			return nil, fmt.Errorf("failed to parse amount paid")
 		}
 
+		if !pending && amountPaid.Cmp(amountPaid) >= 0 {
+			continue
+		}
+
 		var token yuri.Token
 		if err := json.Unmarshal([]byte(tokenStr), &token); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal token: %+v", err)
