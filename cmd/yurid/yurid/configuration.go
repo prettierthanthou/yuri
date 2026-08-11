@@ -224,18 +224,18 @@ func ParseConfig() (Configuration, error) {
 
 		getHooks := func() (yuri.ProviderHooks, error) {
 			if cfg.walletOutDir == "" {
-				return yuri.ProviderHooks{}, fmt.Errorf("expected solana to have a wallet-out-dir but instead recieved '%s'", cfg.walletOutDir)
+				return yuri.ProviderHooks{}, fmt.Errorf("expected %s to have a wallet-out-dir but instead recieved '%s'", chain, cfg.walletOutDir)
 			}
 
 			return yuri.ProviderHooks{
 				OnNewAddress: func(ctx context.Context, pk1 crypto.PublicKey, pk2 crypto.PrivateKey) error {
 					pk3, ok := pk1.(ed25519.PublicKey)
 					if !ok {
-						return fmt.Errorf("failed to cast PublicKey to ed25519 PublicKey: err %+v", err)
+						return fmt.Errorf("failed to cast PublicKey to ed25519 PublicKey: got %T", pk1)
 					}
 					pk4, ok := pk2.(ed25519.PrivateKey)
 					if !ok {
-						return fmt.Errorf("failed to cast PrivateKey to ed25519 PublicKey: err %+v", err)
+						return fmt.Errorf("failed to cast PrivateKey to ed25519 PrivateKey: got %T", pk2)
 					}
 
 					return os.WriteFile(
