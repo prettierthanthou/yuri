@@ -105,6 +105,7 @@ func (a *API) wrapInvoice(id string, inv *yuri.Invoice) wrappedInvoice {
 	fiat := cloned.Metadata[yuridInvoiceFiatMetaID]
 	delete(cloned.Metadata, yuridInvoiceUUIDMetaId)
 	delete(cloned.Metadata, yuridInvoiceFiatMetaID)
+	delete(cloned.Metadata, yuridInvoiceExpireyMetaID)
 	wrapped := wrappedInvoice{
 		Id:      id,
 		Paid:    inv.Paid(),
