@@ -5,14 +5,18 @@ simple, sweet, and quick library/daemon for handling cryptocurrency payments in 
 NOTE: this is extremely experimental
 
 currently supports:
-[x] Ethereum (+ERC20+ERC721)
+[x] Ethereum/L2s/BNB/other EVM chains (Base/Arbitrum....) (ERC20+ERC721)
 [x] Litecoin
 [x] Bitcoin
 [x] Monero
 [x] Solana (+tokens+SPL NFTs)
-[X] Ton (+NFTs)
+[x] Ton (+NFTs)
+
+note: all wallets are created on the node/JsonRPC, unless it has
+a ProviderHooks option. use JsonRPCs you trust!
 
 developers: examples [here](./example_test.go) or on `go doc`
 end users: the daemon lives in [./cmd/yurid](./cmd/yurid)
 
 licensed under the [AGPLv3](./LICENSE)
+repo on [codeberg](https://codeberg.org/lewdest/yuri) and mirrored on [github](https://github.com/prettierthanthou/yuri)
