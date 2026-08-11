@@ -12,5 +12,7 @@ currently supports:
 [x] Solana (+tokens+SPL NFTs)
 [X] Ton (+NFTs)
 
+developers: examples [here](./example_test.go) or on `go doc`
+end users: the daemon lives in [./cmd/yurid](./cmd/yurid)
+
 licensed under the [AGPLv3](./LICENSE)
-examples [here](./example_instance_test.go) or on `go doc`
