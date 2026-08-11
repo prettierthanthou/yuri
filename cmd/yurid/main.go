@@ -68,7 +68,11 @@ func main() {
 		return
 	}
 
-	go instance.Run(ctx)
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		instance.Run(ctx)
+	}()
 
 	slog.Info("created instance", "instance", instance)
 
@@ -102,6 +106,12 @@ func main() {
 	slog.Info("received signal, shutting down", "signal", sig)
 
 	cancel()
+
+	select {
+	case <-runDone:
+	case <-time.After(5 * time.Second):
+		slog.Warn("poller did not stop in time, continuing shutdown")
+	}
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
