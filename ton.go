@@ -157,9 +157,8 @@ func (c *tonChainClient) NFTOwner(
 }
 
 type TonOptions struct {
-	ConfigUrl string
-	Client    chainClient
-	Hooks     ProviderHooks
+	Client chainClient
+	Hooks  ProviderHooks
 }
 
 const TonMainnetPublic = "https://ton-blockchain.github.io/global.config.json"
@@ -199,7 +198,7 @@ func NewTonWithConfigUrl(opts TonOptions, configUrl string) (tonProvider, error)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		if err := client.AddConnectionsFromConfigUrl(ctx, opts.ConfigUrl); err != nil {
+		if err := client.AddConnectionsFromConfigUrl(ctx, configUrl); err != nil {
 			return tonProvider{}, fmt.Errorf("ton AddConnectionsFromConfigUrl failed: %+v", err)
 		}
 
