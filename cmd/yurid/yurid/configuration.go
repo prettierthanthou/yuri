@@ -114,7 +114,7 @@ func (s *pricingProviderSliceFlag) Set(v string) error {
 			slog.Debug("found 'ALL' price provider, registering all...")
 			built := make([]string, 0, len(supportedPricingProviders))
 			for k := range supportedPricingProviders {
-				if k == "null" {
+				if k == "null" || s.Contains(k) {
 					continue
 				}
 
@@ -123,7 +123,7 @@ func (s *pricingProviderSliceFlag) Set(v string) error {
 
 			slog.Debug("added price providers...", "built", built)
 
-			*s = built
+			*s = append(*s, built...)
 			return nil
 		}
 
@@ -138,8 +138,13 @@ func (s *pricingProviderSliceFlag) Set(v string) error {
 }
 
 func (s pricingProviderSliceFlag) Contains(v string) bool {
-	str := s.String()
-	return strings.Contains(str, v)
+	for _, p := range s {
+		if p == v {
+			return true
+		}
+	}
+
+	return false
 }
 
 func ParseConfig() (Configuration, error) {
