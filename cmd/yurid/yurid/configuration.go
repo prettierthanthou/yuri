@@ -272,10 +272,7 @@ func ParseConfig() (Configuration, error) {
 				host = yuri.TonMainnetPublic
 			}
 
-			tonProvider, err := yuri.NewTon(yuri.TonOptions{
-				Hooks: hooks,
-			})
-
+			tonProvider, err := yuri.NewTonWithConfigUrl(yuri.TonOptions{Hooks: hooks}, host)
 			if err != nil {
 				return Configuration{}, fmt.Errorf("failed to create TonProvider: err %+v", err)
 			}
