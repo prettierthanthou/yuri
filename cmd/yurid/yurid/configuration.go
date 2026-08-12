@@ -379,9 +379,11 @@ func (c CryptoConfiguration) RPCConfig(chain yuri.Chain, client *http.Client) (y
 	}, nil
 }
 
+var defaultHTTPTimeout = 15 * time.Second
+
 func defaultHTTPClient(proxyURL string) (*http.Client, error) {
 	if proxyURL == "" {
-		return http.DefaultClient, nil
+		return &http.Client{Timeout: defaultHTTPTimeout}, nil
 	}
 
 	return newHTTPClientFromSOCKS5(proxyURL)
@@ -408,6 +410,7 @@ func newHTTPClientFromSOCKS5(rawURL string) (*http.Client, error) {
 	}
 
 	return &http.Client{
+		Timeout: defaultHTTPTimeout,
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				return dialer.Dial(network, addr)
