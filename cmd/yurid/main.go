@@ -39,6 +39,11 @@ func main() {
 
 	slog.Debug("parsed configuration", "conf", conf)
 
+	wrappedPricingProviders := make([]yuri.PriceProvider, 0, len(conf.PricingProviders))
+	for _, provider := range conf.PricingProviders {
+		wrappedPricingProviders = append(wrappedPricingProviders, yuri.NewCachedPriceProviderWithTTL(provider, 5*time.Minute))
+	}
+
 	database, err := yurid.NewDatabase(conf.DatabaseConfig)
 	if err != nil {
 		slog.Error("failed to open database", "err", err)
@@ -60,7 +65,7 @@ func main() {
 			},
 		},
 		Chains:  conf.Chains,
-		Pricing: conf.PricingProviders,
+		Pricing: wrappedPricingProviders,
 		Storage: database,
 	})
 	if err != nil {
