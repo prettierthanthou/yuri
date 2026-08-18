@@ -3,6 +3,7 @@ package yurid
 import (
 	"bytes"
 	"codeberg.org/lewdest/yuri"
+	"context"
 	_ "database/sql"
 	"encoding/json"
 	"fmt"
@@ -479,4 +480,89 @@ func TestNew_RejectsPastExpiresAt(t *testing.T) {
 
 	const expectedBody = `{"error":"expires_at must be in the future (unix milliseconds)"}`
 	jsonCompare(t, b, []byte(expectedBody))
+}
+
+// fakeChain always succeeds at creating addresses, unlike real providers.
+type fakeChain struct{}
+
+func (fakeChain) Chain() yuri.Chain { return yuri.Ethereum }
+
+func (fakeChain) CreateAddress(context.Context) (string, error) {
+	return uuid.NewString(), nil
+}
+
+func (fakeChain) Decimals() int64 { return 8 }
+
+func (fakeChain) Poll(context.Context, []yuri.Invoice) ([]yuri.Invoice, error) {
+	return nil, nil
+}
+
+func (fakeChain) SupportsNFTs() bool { return false }
+
+func newTestAPI(t *testing.T) *API {
+	t.Helper()
+
+	db, err := NewDatabase(DatabaseConfig{Type: DatabaseTypeSqlite, DSN: ":memory:"})
+	if err != nil {
+		t.Fatalf("database = %+v", err)
+	}
+
+	instance, err := yuri.New(yuri.Options{
+		Pricing:         []yuri.PriceProvider{yuri.NewStaticPriceProvider(1)},
+		Chains:          []yuri.CryptoProvider{fakeChain{}},
+		PriceAggregator: yuri.MedianPriceAggregator{},
+		Storage:         db,
+	})
+	if err != nil {
+		t.Fatalf("instance = %+v", err)
+	}
+
+	return NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)}, "")
+}
+
+func TestNew_NullMetadataSucceeds(t *testing.T) {
+	api := newTestAPI(t)
+
+	body := []byte(`{"chain":"ethereum","amount_fiat":{"currency":{"code":"EUR","decimals":2},"minor":500},"metadata":null}`)
+	req := httptest.NewRequest("POST", yuridTestUrl+"/new", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+
+	api.handleNew(w, req)
+
+	resp := w.Result()
+	b, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		t.Fatalf("StatusCode = %d expected = 200 (body = %s)", resp.StatusCode, b)
+	}
+
+	var created struct {
+		Id string `json:"id"`
+	}
+	if err := json.Unmarshal(b, &created); err != nil {
+		t.Fatal(err)
+	}
+
+	active := getActive(t, api, string(yuri.Ethereum))
+	activeBody, _ := io.ReadAll(active.Result().Body)
+	if active.Result().StatusCode != 200 {
+		t.Fatalf("active StatusCode = %d expected = 200 (body = %s)", active.Result().StatusCode, activeBody)
+	}
+
+	var activeInvoices map[string]json.RawMessage
+	if err := json.Unmarshal(activeBody, &activeInvoices); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := activeInvoices[created.Id]; !ok {
+		t.Fatalf("invoice %s was not found in active invoices", created.Id)
+	}
+}
+
+func getActive(t *testing.T, api *API, chain string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	req := httptest.NewRequest("GET", yuridTestUrl+"/active?chain="+chain, nil)
+	w := httptest.NewRecorder()
+
+	api.handleActive(w, req)
+	return w
 }

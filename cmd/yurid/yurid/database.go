@@ -297,6 +297,9 @@ func (d *database) GetActiveInvoices(ctx context.Context, chain yuri.Chain) ([]y
 		if err := json.Unmarshal([]byte(metadataStr), &metadata); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal metadata: %+v", err)
 		}
+		if metadata == nil {
+			metadata = make(map[string]any)
+		}
 
 		metadata[yuridInvoiceUUIDMetaId] = id
 		collectedInvoices = append(collectedInvoices, yuri.Invoice{
@@ -314,6 +317,10 @@ func (d *database) GetActiveInvoices(ctx context.Context, chain yuri.Chain) ([]y
 }
 
 func (d *database) NewInvoiceWithExpirey(ctx context.Context, inv yuri.Invoice, expiresAt time.Time) (uuid.UUID, error) {
+	if inv.Metadata == nil {
+		inv.Metadata = map[string]any{}
+	}
+
 	id, err := uuid.NewV7()
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("uuid: %w", err)
