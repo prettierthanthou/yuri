@@ -389,7 +389,7 @@ func (p marketProvider) Get(ctx context.Context, currency Currency, chain string
 	case "bitnob":
 		if m, ok := asMap(payload); ok {
 			if data, ok := asMap(m["data"]); ok {
-				for _, v := range data {
+				if v, ok := pickAnyNumber(data, currency.Code); ok {
 					return numberToMinor(currency, v)
 				}
 			}

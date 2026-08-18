@@ -2,9 +2,11 @@ package yuri
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -25,7 +27,7 @@ func TestMarketProviderBuildsAssetSpecificURLs(t *testing.T) {
 			currency:     USD,
 			chain:        "LTC",
 			wantPath:     "/api/v1/rates/ltc/price",
-			responseBody: `{"data":{"rate":1}}`,
+			responseBody: `{"data":{"USD":1}}`,
 		},
 		{
 			name:         "bylls-eth",
@@ -75,7 +77,7 @@ func TestMarketProviderBuildsAssetSpecificURLs(t *testing.T) {
 
 			tt.p.url = srv.URL + tt.wantPath
 
-			got, err := tt.p.Get(context.Background(), tt.currency, tt.chain, tt.token)
+			got, err := tt.p.Get(context.Background(), tt.currency, tt.chain, Token{})
 			if err != nil {
 				t.Fatalf("Get() error: %v", err)
 			}
@@ -325,7 +327,7 @@ func TestMarketProviderUsesTokenSymbol(t *testing.T) {
 			t.Fatalf("path = %q", r.URL.Path)
 		}
 
-		if _, err := w.Write([]byte(`{"data":{"rate":1.00}}`)); err != nil {
+		if _, err := w.Write([]byte(`{"data":{"USD":1.00}}`)); err != nil {
 			t.Fatalf("failed to write: %+v", err)
 		}
 	}))
@@ -341,5 +343,98 @@ func TestMarketProviderUsesTokenSymbol(t *testing.T) {
 
 	if got != 100 {
 		t.Fatalf("Get() = %d want %d", got, 100)
+	}
+}
+
+// cannedTransport serves a fixed body for every request, so tests can hit
+// URL-based providers without network access.
+type cannedTransport struct {
+	body string
+	urls []string
+}
+
+func (c *cannedTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	c.urls = append(c.urls, r.URL.String())
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader(c.body)),
+	}, nil
+}
+
+func TestMarketProviderQuotesRequestedCurrency(t *testing.T) {
+	tests := []struct {
+		name         string
+		p            marketProvider
+		currency     Currency
+		chain        string
+		responseBody string
+		want         int64
+	}{
+		{
+			name:         "bitnob-usd-from-map",
+			p:            NewBitnobPriceProvider(nil).(marketProvider),
+			currency:     USD,
+			chain:        "LTC",
+			responseBody: `{"data":{"USD":50000,"NGN":80000000}}`,
+			want:         5000000,
+		},
+		{
+			name:         "bitnob-ngn-from-map",
+			p:            NewBitnobPriceProvider(nil).(marketProvider),
+			currency:     Currency{Code: "NGN", Decimals: 2},
+			chain:        "LTC",
+			responseBody: `{"data":{"USD":50000,"NGN":80000000}}`,
+			want:         8000000000,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transport := &cannedTransport{body: tt.responseBody}
+			tt.p.client = httpClient(&http.Client{Transport: transport})
+
+			got, err := tt.p.Get(context.Background(), tt.currency, tt.chain, Token{})
+			if err != nil {
+				t.Fatalf("Get() error: %v", err)
+			}
+
+			if got != tt.want {
+				t.Fatalf("Get() = %d want %d", got, tt.want)
+			}
+
+			if len(transport.urls) != 1 {
+				t.Fatalf("expected 1 request, got %d", len(transport.urls))
+			}
+		})
+	}
+}
+
+func TestMarketProviderRejectsUnsupportedCurrency(t *testing.T) {
+	tests := []struct {
+		name         string
+		p            marketProvider
+		currency     Currency
+		chain        string
+		responseBody string
+	}{
+		{
+			name:         "bitnob-usd-missing",
+			p:            NewBitnobPriceProvider(nil).(marketProvider),
+			currency:     USD,
+			chain:        "LTC",
+			responseBody: `{"data":{"NGN":80000000}}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.p.client = httpClient(&http.Client{Transport: &cannedTransport{body: tt.responseBody}})
+
+			got, err := tt.p.Get(context.Background(), tt.currency, tt.chain, Token{})
+			if err == nil {
+				t.Fatalf("Get() = %d, want error", got)
+			}
+		})
 	}
 }
