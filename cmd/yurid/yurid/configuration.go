@@ -413,6 +413,9 @@ func newHTTPClientFromSOCKS5(rawURL string) (*http.Client, error) {
 		Timeout: defaultHTTPTimeout,
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				if cd, ok := dialer.(proxy.ContextDialer); ok {
+					return cd.DialContext(ctx, network, addr)
+				}
 				return dialer.Dial(network, addr)
 			},
 		},
