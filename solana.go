@@ -261,13 +261,14 @@ func (s solanaProvider) rpcMultipleAccounts(
 
 	out := make([]*big.Int, len(addrs))
 
-	for i, acct := range resp.Value {
-		if acct == nil {
-			out[i] = new(big.Int)
+	for i := range addrs {
+		out[i] = new(big.Int)
+
+		if i >= len(resp.Value) || resp.Value[i] == nil {
 			continue
 		}
 
-		out[i] = new(big.Int).SetUint64(acct.Lamports)
+		out[i].SetUint64(resp.Value[i].Lamports)
 	}
 
 	return out, nil
@@ -302,9 +303,15 @@ func (s solanaProvider) rpcMultipleTokenAccounts(
 
 	out := make([]*big.Int, len(addrs))
 
-	for i, acct := range resp.Value {
-		if acct == nil {
-			out[i] = new(big.Int)
+	for i := range addrs {
+		out[i] = new(big.Int)
+
+		if i >= len(resp.Value) || resp.Value[i] == nil {
+			continue
+		}
+
+		acct := resp.Value[i]
+		if len(acct.Data) == 0 {
 			continue
 		}
 
@@ -313,13 +320,9 @@ func (s solanaProvider) rpcMultipleTokenAccounts(
 			return nil, err
 		}
 
-		if len(raw) < 72 {
-			out[i] = new(big.Int)
-			continue
+		if len(raw) >= 72 {
+			out[i].SetUint64(binary.LittleEndian.Uint64(raw[64:72]))
 		}
-
-		amount := binary.LittleEndian.Uint64(raw[64:72])
-		out[i] = new(big.Int).SetUint64(amount)
 	}
 
 	return out, nil

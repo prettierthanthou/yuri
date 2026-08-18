@@ -1,11 +1,15 @@
 package yuri
 
 import (
+	"bytes"
 	"context"
 	"crypto"
 	"crypto/ed25519"
+	"encoding/json"
 	"fmt"
 	"math/big"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -42,6 +46,162 @@ func solanaHelperCreateEnv(t *testing.T) (JsonRpcClient, yuritest.Container) {
 	return NewJsonRpcClient(JsonRpcClientConfig{
 		Host: cNode.HTTP() + "/",
 	}), *cNode
+}
+
+// solanaFakeRpc answers every getMultipleAccounts request with the given value.
+func solanaFakeRpc(t *testing.T, value any) JsonRpcClient {
+	t.Helper()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
+		var req struct {
+			Id     string `json:"id"`
+			Method string `json:"method"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if req.Method != "getMultipleAccounts" {
+			http.Error(w, "unexpected method: "+req.Method, http.StatusBadRequest)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      req.Id,
+			"result": map[string]any{
+				"context": map[string]any{"slot": 1},
+				"value":   value,
+			},
+		})
+	}))
+
+	t.Cleanup(srv.Close)
+
+	return NewJsonRpcClient(JsonRpcClientConfig{Host: srv.URL})
+}
+
+// missing accounts (null or short responses) are treated as zero balance.
+func TestSolanaPollShortMultipleAccountsResponse(t *testing.T) {
+	ctx := context.Background()
+
+	const lamports = uint64(5_000_000_000)
+
+	addresses := []string{
+		"11111111111111111111111111111111",
+		"22222222222222222222222222222222",
+		"33333333333333333333333333333333",
+	}
+
+	invoices := make([]Invoice, len(addresses))
+	for i, addr := range addresses {
+		invoices[i] = Invoice{
+			Chain:      Solana,
+			Address:    addr,
+			AmountOwed: big.NewInt(100),
+			AmountPaid: big.NewInt(123_456),
+		}
+	}
+
+	for _, tc := range []struct {
+		name  string
+		value any
+	}{
+		{name: "null value", value: nil},
+		{name: "short value", value: []any{map[string]any{"lamports": lamports}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			provider := NewSolana(SolanaOptions{
+				isTest: true,
+				Rpc:    solanaFakeRpc(t, tc.value).conf,
+			})
+
+			changed, err := provider.Poll(ctx, invoices)
+			if err != nil {
+				t.Fatalf("Poll: %v", err)
+			}
+			if len(changed) != len(invoices) {
+				t.Fatalf("expected %d changed invoices, got %d", len(invoices), len(changed))
+			}
+
+			for i, inv := range changed {
+				want := big.NewInt(0)
+				if tc.value != nil && i == 0 {
+					want = new(big.Int).SetUint64(lamports)
+				}
+
+				if inv.AmountPaid.Cmp(want) != 0 {
+					t.Fatalf("invoice %d AmountPaid = %v, want %v", i, inv.AmountPaid, want)
+				}
+			}
+		})
+	}
+}
+
+// malformed or missing token accounts are treated as zero balance.
+func TestSolanaPollMalformedTokenAccounts(t *testing.T) {
+	ctx := context.Background()
+
+	const mint = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+
+	invoices := []Invoice{
+		{
+			Chain:   Solana,
+			Address: base58.Encode(bytes.Repeat([]byte{0x11}, 32)),
+			Token: Token{
+				Symbol:   "TEST",
+				Decimals: 9,
+				Contract: mint,
+			},
+			AmountOwed: big.NewInt(100),
+			AmountPaid: big.NewInt(123_456),
+		},
+		{
+			Chain:   Solana,
+			Address: base58.Encode(bytes.Repeat([]byte{0x22}, 32)),
+			Token: Token{
+				Symbol:   "TEST",
+				Decimals: 9,
+				Contract: mint,
+			},
+			AmountOwed: big.NewInt(100),
+			AmountPaid: big.NewInt(123_456),
+		},
+	}
+
+	for _, tc := range []struct {
+		name  string
+		value any
+	}{
+		{name: "empty data", value: []any{map[string]any{"data": []any{}}}},
+		{name: "null data", value: []any{map[string]any{"data": nil}}},
+		{name: "short value", value: []any{map[string]any{"data": []any{}}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			provider := NewSolana(SolanaOptions{
+				isTest: true,
+				Rpc:    solanaFakeRpc(t, tc.value).conf,
+			})
+
+			changed, err := provider.Poll(ctx, invoices)
+			if err != nil {
+				t.Fatalf("Poll: %v", err)
+			}
+			if len(changed) != len(invoices) {
+				t.Fatalf("expected %d changed invoices, got %d", len(invoices), len(changed))
+			}
+
+			for i, inv := range changed {
+				if inv.AmountPaid.Sign() != 0 {
+					t.Fatalf("invoice %d AmountPaid = %v, want 0", i, inv.AmountPaid)
+				}
+			}
+		})
+	}
 }
 
 func TestSolanaChainAndDecimals(t *testing.T) {
