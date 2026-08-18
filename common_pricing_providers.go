@@ -408,8 +408,10 @@ func (p marketProvider) Get(ctx context.Context, currency Currency, chain string
 
 	switch p.url {
 	case "https://api.bb.no/v1/price/nok":
-		if m, ok := asMap(payload); ok {
-			return valueFromAny(m["bid"], m["ask"], currency)
+		if strings.EqualFold(currency.Code, "NOK") {
+			if m, ok := asMap(payload); ok {
+				return valueFromAny(m["bid"], m["ask"], currency)
+			}
 		}
 		return -1, unsupportedPairError(chain, token, currency)
 	case "https://api.btcturk.com/api/v2/ticker":
@@ -448,11 +450,14 @@ func (p marketProvider) Get(ctx context.Context, currency Currency, chain string
 		}
 		return -1, unsupportedPairError(chain, token, currency)
 	case "https://ny.bitmynt.no/data/rates.json":
-		if m, ok := asMap(payload); ok {
-			if cur, ok := m["current_rate"].(map[string]any); ok {
-				return valueFromAny(cur["bid"], cur["ask"], currency)
+		if strings.EqualFold(currency.Code, "NOK") {
+			if m, ok := asMap(payload); ok {
+				if cur, ok := m["current_rate"].(map[string]any); ok {
+					return valueFromAny(cur["bid"], cur["ask"], currency)
+				}
 			}
 		}
+		return -1, unsupportedPairError(chain, token, currency)
 	case "https://bylls.com/api/price?from_currency=BTC&to_currency=CAD":
 		if m, ok := asMap(payload); ok {
 			if pub, ok := m["public_price"].(map[string]any); ok {

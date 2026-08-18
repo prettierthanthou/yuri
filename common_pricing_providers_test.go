@@ -387,6 +387,22 @@ func TestMarketProviderQuotesRequestedCurrency(t *testing.T) {
 			responseBody: `{"data":{"USD":50000,"NGN":80000000}}`,
 			want:         8000000000,
 		},
+		{
+			name:         "bb-no-nok",
+			p:            NewBareBitcoinPriceProvider(nil).(marketProvider),
+			currency:     Currency{Code: "NOK", Decimals: 2},
+			chain:        "BTC",
+			responseBody: `{"bid":500000,"ask":500020}`,
+			want:         50001000,
+		},
+		{
+			name:         "bitmynt-nok",
+			p:            NewBitmyntPriceProvider(nil).(marketProvider),
+			currency:     Currency{Code: "NOK", Decimals: 2},
+			chain:        "BTC",
+			responseBody: `{"current_rate":{"bid":500000,"ask":500020}}`,
+			want:         50001000,
+		},
 	}
 
 	for _, tt := range tests {
@@ -424,6 +440,27 @@ func TestMarketProviderRejectsUnsupportedCurrency(t *testing.T) {
 			currency:     USD,
 			chain:        "LTC",
 			responseBody: `{"data":{"NGN":80000000}}`,
+		},
+		{
+			name:         "bb-no-usd",
+			p:            NewBareBitcoinPriceProvider(nil).(marketProvider),
+			currency:     USD,
+			chain:        "BTC",
+			responseBody: `{"bid":500000,"ask":500020}`,
+		},
+		{
+			name:         "bb-no-eur",
+			p:            NewBareBitcoinPriceProvider(nil).(marketProvider),
+			currency:     EUR,
+			chain:        "BTC",
+			responseBody: `{"bid":500000,"ask":500020}`,
+		},
+		{
+			name:         "bitmynt-usd",
+			p:            NewBitmyntPriceProvider(nil).(marketProvider),
+			currency:     USD,
+			chain:        "BTC",
+			responseBody: `{"current_rate":{"bid":500000,"ask":500020}}`,
 		},
 	}
 
