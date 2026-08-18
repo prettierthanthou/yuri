@@ -12,6 +12,7 @@ import (
 	"io"
 	"log"
 	_ "modernc.org/sqlite"
+	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"testing"
