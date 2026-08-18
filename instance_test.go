@@ -895,6 +895,123 @@ func TestInstancePollProviderError(t *testing.T) {
 	}
 }
 
+func TestInstancePollPersistsPartialProviderResults(t *testing.T) {
+	storage := &pollStorage{
+		invoices: []Invoice{
+			{Address: "abc"},
+		},
+	}
+
+	provider := &pollProvider{
+		updated: []Invoice{
+			{Address: "abc", Pending: true},
+		},
+		err: errors.New("one invoice failed"),
+	}
+
+	var reported error
+
+	instance, err := New(Options{
+		Storage: storage,
+		Pricing: []PriceProvider{
+			testingFixedPriceProvider{price: 100},
+		},
+		Chains: []CryptoProvider{
+			provider,
+		},
+		Hooks: Hooks{
+			OnError: func(err error) {
+				reported = err
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = instance.poll(
+		context.Background(),
+		Chain("test"),
+		provider,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !storage.updateCalled {
+		t.Fatal("UpdateInvoices not called for partial provider results")
+	}
+
+	if len(storage.updatedInvoices) != 1 {
+		t.Fatalf(
+			"expected partial invoice stored, got %d",
+			len(storage.updatedInvoices),
+		)
+	}
+
+	if reported == nil {
+		t.Fatal("expected partial poll error to be reported")
+	}
+
+	if !strings.Contains(reported.Error(), "partial poll") {
+		t.Fatalf("unexpected reported error: %v", reported)
+	}
+}
+
+func TestInstancePollReportsPartialFailureWithoutChanges(t *testing.T) {
+	storage := &pollStorage{
+		invoices: []Invoice{
+			{Address: "abc"},
+		},
+	}
+
+	provider := &pollProvider{
+		updated: []Invoice{},
+		err:     errors.New("one invoice failed"),
+	}
+
+	var reported error
+
+	instance, err := New(Options{
+		Storage: storage,
+		Pricing: []PriceProvider{
+			testingFixedPriceProvider{price: 100},
+		},
+		Chains: []CryptoProvider{
+			provider,
+		},
+		Hooks: Hooks{
+			OnError: func(err error) {
+				reported = err
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = instance.poll(
+		context.Background(),
+		Chain("test"),
+		provider,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !storage.updateCalled {
+		t.Fatal("UpdateInvoices not called for partial provider results")
+	}
+
+	if reported == nil {
+		t.Fatal("expected partial poll error to be reported")
+	}
+
+	if !strings.Contains(reported.Error(), "partial poll") {
+		t.Fatalf("unexpected reported error: %v", reported)
+	}
+}
+
 var _ CryptoProvider = &contextObservedProvider{}
 
 type contextObservedProvider struct {

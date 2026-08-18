@@ -2,7 +2,10 @@ package yuri
 
 import (
 	"context"
+	"encoding/json"
 	"math/big"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -312,6 +315,101 @@ func TestEthereumParseHexBigInt(t *testing.T) {
 				t.Fatalf("parseHexBigInt(%q) = %s want %s", tt.raw, got.String(), tt.want)
 			}
 		})
+	}
+}
+
+// ethereumFakeRpc serves eth_getBalance with per-address hex balances,
+// returning a JSON-RPC error for any address in the fails set.
+func ethereumFakeRpc(t *testing.T, balances map[string]string, fails map[string]bool) JsonRpcClient {
+	t.Helper()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
+		var req struct {
+			Id     string `json:"id"`
+			Method string `json:"method"`
+			Params []any  `json:"params"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if req.Method != "eth_getBalance" {
+			http.Error(w, "unexpected method: "+req.Method, http.StatusBadRequest)
+			return
+		}
+
+		addr, _ := req.Params[0].(string)
+
+		w.Header().Set("Content-Type", "application/json")
+		if fails[addr] {
+			json.NewEncoder(w).Encode(map[string]any{
+				"jsonrpc": "2.0",
+				"id":      req.Id,
+				"error": map[string]any{
+					"code":    -32000,
+					"message": "connection refused",
+				},
+			})
+			return
+		}
+
+		json.NewEncoder(w).Encode(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      req.Id,
+			"result":  balances[addr],
+		})
+	}))
+
+	return NewJsonRpcClient(JsonRpcClientConfig{Host: srv.URL + "/"})
+}
+
+func TestEthereumPollIsolatesInvoiceErrors(t *testing.T) {
+	goodAddr := "0x1111111111111111111111111111111111111111"
+	badAddr := "0x2222222222222222222222222222222222222222"
+
+	rpc := ethereumFakeRpc(t, map[string]string{
+		goodAddr: "0x64",
+	}, map[string]bool{
+		badAddr: true,
+	})
+
+	provider := NewEthereum(JsonRpcClientConfig{
+		Host: rpc.conf.Host,
+	})
+
+	invoices := []Invoice{
+		{
+			Chain:      Ethereum,
+			Address:    goodAddr,
+			AmountOwed: big.NewInt(100),
+			AmountPaid: big.NewInt(0),
+		},
+		{
+			Chain:      Ethereum,
+			Address:    badAddr,
+			AmountOwed: big.NewInt(100),
+			AmountPaid: big.NewInt(0),
+		},
+	}
+
+	changed, err := provider.Poll(context.Background(), invoices)
+	if err == nil {
+		t.Fatal("expected error for failing invoice")
+	}
+
+	if len(changed) != 1 {
+		t.Fatalf("expected 1 changed invoice, got %d", len(changed))
+	}
+
+	if changed[0].Address != goodAddr {
+		t.Fatalf("expected changed invoice for %s, got %s", goodAddr, changed[0].Address)
+	}
+
+	if changed[0].AmountPaid.Cmp(big.NewInt(100)) != 0 {
+		t.Fatalf("expected paid = 100, got %v", changed[0].AmountPaid)
 	}
 }
 

@@ -36,6 +36,10 @@ type CryptoProvider interface {
 	//
 	// An empty slice should be returned if no invoices changed.
 	//
+	// If some invoices failed but others polled fine, return the updated
+	// invoices alongside the error. If the whole poll cycle failed, return
+	// nil alongside the error.
+	//
 	// Please see [Invoice]'s documentation for the expcted semantics of [Invoice.AmountPaid] and [Invoice.Pending]
 	Poll(context.Context, []Invoice) ([]Invoice, error)
 

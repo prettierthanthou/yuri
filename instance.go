@@ -169,7 +169,13 @@ func (i *Instance) poll(
 
 	updatedInvoices, err := provider.Poll(ctx, invoices)
 	if err != nil {
-		return fmt.Errorf("failed during CryptoProvider poll cycle: %+v", err)
+		// Poll returns nil when the whole cycle failed; an empty non-nil
+		// slice just means nothing changed.
+		if updatedInvoices == nil {
+			return fmt.Errorf("failed during CryptoProvider poll cycle: %+v", err)
+		}
+
+		i.reportErr(fmt.Errorf("partial poll (%s): %+v", chain, err))
 	}
 
 	if err := i.opts.Storage.UpdateInvoices(ctx, updatedInvoices); err != nil {

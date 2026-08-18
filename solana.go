@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math/big"
 
@@ -98,6 +99,11 @@ func (s solanaProvider) Poll(ctx context.Context, invoices []Invoice) ([]Invoice
 
 	balances := make(map[string]*balanceBalance, len(invoices))
 
+	// invoices which failed setup are skipped rather than reported as updated.
+	skipped := make(map[string]bool, len(invoices))
+
+	var errs []error
+
 	var (
 		solAddrs []string
 		solKeys  []string
@@ -118,12 +124,16 @@ func (s solanaProvider) Poll(ctx context.Context, invoices []Invoice) ([]Invoice
 		case inv.Token.Symbol == NftSymbol:
 			id, ok := NftIdentifierFromString(inv.Token.Contract)
 			if !ok {
-				return nil, fmt.Errorf("invalid NFT identifier")
+				errs = append(errs, fmt.Errorf("invalid NFT identifier %q for invoice %s", inv.Token.Contract, inv.Address))
+				skipped[tokenBalanceKey(inv.Address, inv.Token)] = true
+				continue
 			}
 
 			ata, err := solana.AssociatedTokenAddress(inv.Address, id.Asset)
 			if err != nil {
-				return nil, err
+				errs = append(errs, fmt.Errorf("failed to derive ATA for invoice %s (nft %s): %w", inv.Address, inv.Token.Contract, err))
+				skipped[tokenBalanceKey(inv.Address, inv.Token)] = true
+				continue
 			}
 
 			nftAddrs = append(nftAddrs, ata)
@@ -132,7 +142,9 @@ func (s solanaProvider) Poll(ctx context.Context, invoices []Invoice) ([]Invoice
 		default:
 			ata, err := solana.AssociatedTokenAddress(inv.Address, inv.Token.Contract)
 			if err != nil {
-				return nil, err
+				errs = append(errs, fmt.Errorf("failed to derive ATA for invoice %s (token %s): %w", inv.Address, inv.Token.Contract, err))
+				skipped[tokenBalanceKey(inv.Address, inv.Token)] = true
+				continue
 			}
 
 			ataAddrs = append(ataAddrs, ata)
@@ -202,12 +214,16 @@ func (s solanaProvider) Poll(ctx context.Context, invoices []Invoice) ([]Invoice
 
 	out := make([]Invoice, 0, len(invoices))
 	for _, inv := range invoices {
-		cp := inv.Clone()
-
 		key := inv.Address
 		if inv.Token != (Token{}) {
 			key = tokenBalanceKey(inv.Address, inv.Token)
 		}
+
+		if skipped[key] {
+			continue
+		}
+
+		cp := inv.Clone()
 
 		bal := balances[key]
 		if bal == nil {
@@ -226,6 +242,14 @@ func (s solanaProvider) Poll(ctx context.Context, invoices []Invoice) ([]Invoice
 		if InvoicePollChanged(inv, cp) {
 			out = append(out, cp)
 		}
+	}
+
+	if len(errs) > 0 {
+		if len(balances) == 0 {
+			return nil, errors.Join(errs...)
+		}
+
+		return out, errors.Join(errs...)
 	}
 
 	return out, nil

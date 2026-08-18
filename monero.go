@@ -2,6 +2,8 @@ package yuri
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"math/big"
 )
 
@@ -48,6 +50,8 @@ func (m monero) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, error)
 	// (major, minor) -> invoice index
 	invoiceBySubaddr := make(map[subaddr]int, len(invoices))
 
+	var errs []error
+
 	for i := range invoices {
 		select {
 		case <-ctx.Done():
@@ -72,7 +76,8 @@ func (m monero) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, error)
 			},
 		}, &resp)
 		if err != nil {
-			return nil, err
+			errs = append(errs, fmt.Errorf("invoice %s: %w", invoice.Address, err))
+			continue
 		}
 
 		addressSpaces[resp.Index.Major] = append(addressSpaces[resp.Index.Major], resp.Index.Minor)
@@ -80,6 +85,10 @@ func (m monero) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, error)
 			major: resp.Index.Major,
 			minor: resp.Index.Minor,
 		}] = i
+	}
+
+	if len(errs) > 0 && len(invoiceBySubaddr) == 0 {
+		return nil, errors.Join(errs...)
 	}
 
 	newInvoices := make([]Invoice, 0, len(invoices))
@@ -127,6 +136,10 @@ func (m monero) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, error)
 				newInvoices = append(newInvoices, updated)
 			}
 		}
+	}
+
+	if len(errs) > 0 {
+		return newInvoices, errors.Join(errs...)
 	}
 
 	return newInvoices, nil

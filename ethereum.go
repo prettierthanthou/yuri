@@ -2,6 +2,7 @@ package yuri
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 	"strings"
@@ -121,6 +122,10 @@ func (e ethereumLike) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, 
 
 	balances := make(map[string]*balanceBalance, len(invoices))
 
+	skipped := make(map[string]bool, len(invoices))
+
+	var errs []error
+
 	for i := range invoices {
 		select {
 		case <-ctx.Done():
@@ -132,7 +137,9 @@ func (e ethereumLike) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, 
 		if inv.Token != (Token{}) && inv.Token.Symbol == NftSymbol {
 			latest, pending, err := e.erc721Ownership(ctx, inv.Address, inv.Token)
 			if err != nil {
-				return nil, err
+				errs = append(errs, fmt.Errorf("invoice %s (nft %s): %w", inv.Address, inv.Token.Contract, err))
+				skipped[tokenBalanceKey(inv.Address, inv.Token)] = true
+				continue
 			}
 
 			key := tokenBalanceKey(inv.Address, inv.Token)
@@ -146,7 +153,9 @@ func (e ethereumLike) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, 
 		if inv.Token == (Token{}) {
 			latest, pending, err := e.nativeBalance(ctx, inv.Address)
 			if err != nil {
-				return nil, err
+				errs = append(errs, fmt.Errorf("invoice %s (native): %w", inv.Address, err))
+				skipped[inv.Address] = true
+				continue
 			}
 
 			balances[inv.Address] = &balanceBalance{
@@ -158,7 +167,9 @@ func (e ethereumLike) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, 
 
 		latest, pending, err := e.erc20Balance(ctx, inv.Address, inv.Token)
 		if err != nil {
-			return nil, err
+			errs = append(errs, fmt.Errorf("invoice %s (token %s): %w", inv.Address, inv.Token.Contract, err))
+			skipped[tokenBalanceKey(inv.Address, inv.Token)] = true
+			continue
 		}
 
 		key := tokenBalanceKey(inv.Address, inv.Token)
@@ -166,6 +177,10 @@ func (e ethereumLike) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, 
 			pending: pending,
 			latest:  latest,
 		}
+	}
+
+	if len(errs) > 0 && len(balances) == 0 {
+		return nil, errors.Join(errs...)
 	}
 
 	newInvoices := make([]Invoice, 0, len(invoices))
@@ -182,6 +197,10 @@ func (e ethereumLike) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, 
 			key = tokenBalanceKey(updatedInvoice.Address, updatedInvoice.Token)
 		}
 
+		if skipped[key] {
+			continue
+		}
+
 		bal := balances[key]
 		if bal == nil {
 			bal = &balanceBalance{pending: new(big.Int), latest: new(big.Int)}
@@ -195,6 +214,10 @@ func (e ethereumLike) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, 
 		if InvoicePollChanged(invoices[i], updatedInvoice) {
 			newInvoices = append(newInvoices, updatedInvoice)
 		}
+	}
+
+	if len(errs) > 0 {
+		return newInvoices, errors.Join(errs...)
 	}
 
 	return newInvoices, nil
