@@ -209,6 +209,8 @@ func (a *API) handleActive(w http.ResponseWriter, r *http.Request) {
 
 type WrappedInvoiceCreate struct {
 	yuri.InvoiceCreate
+	// ExpiresAt is the expiry time in unix milliseconds. If no time is provided
+	// it will default to 30m.
 	ExpiresAt int64 `json:"expires_at"`
 }
 
@@ -239,6 +241,11 @@ func (a *API) handleNew(w http.ResponseWriter, r *http.Request) {
 
 	if req.AmountFiat.Minor <= 0 {
 		writeError(w, http.StatusBadRequest, "amount cannot be less than or equal to zero", nil)
+		return
+	}
+
+	if req.ExpiresAt != 0 && req.ExpiresAt <= time.Now().UnixMilli() {
+		writeError(w, http.StatusBadRequest, "expires_at must be in the future (unix milliseconds)", nil)
 		return
 	}
 

@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"testing"
+	"time"
 )
 
 const yuridTestAddr = ":6761"
@@ -436,4 +437,46 @@ func TestAuth_AcceptsToken(t *testing.T) {
 	if w.Result().StatusCode != 200 {
 		t.Fatalf("StatusCode = %d expected = 200", w.Result().StatusCode)
 	}
+}
+
+func TestNew_RejectsPastExpiresAt(t *testing.T) {
+	db, err := NewDatabase(DatabaseConfig{Type: DatabaseTypeSqlite, DSN: ":memory:"})
+	if err != nil {
+		t.Fatalf("database = %+v", err)
+	}
+
+	instance, err := yuri.New(yuri.Options{
+		Pricing:         []yuri.PriceProvider{yuri.NewStaticPriceProvider(1)},
+		Chains:          []yuri.CryptoProvider{yuri.NewEthereum(yuri.JsonRpcClientConfig{})},
+		PriceAggregator: yuri.MedianPriceAggregator{},
+		Storage:         db,
+	})
+	if err != nil {
+		t.Fatalf("instance = %+v", err)
+	}
+
+	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)}, "")
+	body, _ := json.Marshal(WrappedInvoiceCreate{
+		InvoiceCreate: yuri.InvoiceCreate{
+			Chain:      yuri.Ethereum,
+			Token:      yuri.Token{},
+			AmountFiat: yuri.EUR.Of(5),
+			Metadata:   map[string]any{},
+		},
+		ExpiresAt: time.Now().Add(-1 * time.Hour).UnixMilli(),
+	})
+
+	req := httptest.NewRequest("POST", yuridTestUrl+"/new", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+
+	api.handleNew(w, req)
+
+	resp := w.Result()
+	b, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 400 {
+		t.Fatalf("StatusCode = %d expected = 400 (body = %s)", resp.StatusCode, b)
+	}
+
+	const expectedBody = `{"error":"expires_at must be in the future (unix milliseconds)"}`
+	jsonCompare(t, b, []byte(expectedBody))
 }
