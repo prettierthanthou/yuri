@@ -10,6 +10,12 @@ import (
 
 const Ethereum Chain = "ethereum"
 const BNB Chain = "bnb"
+const Polygon Chain = "polygon"
+const Avalanche Chain = "avalanche"
+const Arbitrum Chain = "arbitrum"
+const Base Chain = "base"
+const Optimism Chain = "optimism"
+const Fantom Chain = "fantom"
 
 // EthereumUSDT is USD(Tether) on Eth(eth) not Eth(base)
 var EthereumUSDT Token = Token{
@@ -49,6 +55,60 @@ func NewBNB(rpcConf JsonRpcClientConfig) ethereumLike {
 		jsonRpc: NewJsonRpcClient(rpcConf),
 		chain:   BNB,
 		symbol:  "BNB",
+	}
+}
+
+// NewPolygon constructs a new ethereumLike CryptoProvider preconfigured for the Polygon (MATIC) chain.
+func NewPolygon(rpcConf JsonRpcClientConfig) ethereumLike {
+	return ethereumLike{
+		jsonRpc: NewJsonRpcClient(rpcConf),
+		chain:   Polygon,
+		symbol:  "MATIC",
+	}
+}
+
+// NewAvalanche constructs a new ethereumLike CryptoProvider preconfigured for the Avalanche C-chain.
+func NewAvalanche(rpcConf JsonRpcClientConfig) ethereumLike {
+	return ethereumLike{
+		jsonRpc: NewJsonRpcClient(rpcConf),
+		chain:   Avalanche,
+		symbol:  "AVAX",
+	}
+}
+
+// NewArbitrum constructs a new ethereumLike CryptoProvider preconfigured for the Arbitrum chain.
+func NewArbitrum(rpcConf JsonRpcClientConfig) ethereumLike {
+	return ethereumLike{
+		jsonRpc: NewJsonRpcClient(rpcConf),
+		chain:   Arbitrum,
+		symbol:  "ETH",
+	}
+}
+
+// NewBase constructs a new ethereumLike CryptoProvider preconfigured for the Base chain.
+func NewBase(rpcConf JsonRpcClientConfig) ethereumLike {
+	return ethereumLike{
+		jsonRpc: NewJsonRpcClient(rpcConf),
+		chain:   Base,
+		symbol:  "ETH",
+	}
+}
+
+// NewOptimism constructs a new ethereumLike CryptoProvider preconfigured for the Optimism chain.
+func NewOptimism(rpcConf JsonRpcClientConfig) ethereumLike {
+	return ethereumLike{
+		jsonRpc: NewJsonRpcClient(rpcConf),
+		chain:   Optimism,
+		symbol:  "ETH",
+	}
+}
+
+// NewFantom constructs a new ethereumLike CryptoProvider preconfigured for the Fantom chain.
+func NewFantom(rpcConf JsonRpcClientConfig) ethereumLike {
+	return ethereumLike{
+		jsonRpc: NewJsonRpcClient(rpcConf),
+		chain:   Fantom,
+		symbol:  "FTM",
 	}
 }
 

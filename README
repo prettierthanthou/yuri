@@ -5,9 +5,10 @@ simple, sweet, and quick library/daemon for handling cryptocurrency payments in 
 NOTE: this is extremely experimental
 
 currently supports:
-[x] Ethereum/L2s/BNB/other EVM chains (Base/Arbitrum....) (ERC20+ERC721)
+[x] Ethereum/L2s/BNB/other EVM chains (Base/Arbitrum/Polygon/Avalanche/Optimism/Fantom...) (ERC20+ERC721)
 [x] Litecoin
 [x] Bitcoin
+[x] Dogecoin
 [x] Monero
 [x] Solana (+tokens+SPL NFTs)
 [x] Ton (+NFTs)

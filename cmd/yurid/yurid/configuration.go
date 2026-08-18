@@ -34,8 +34,15 @@ const exampleUsage = `yurid \
 var supportedChainNames = []yuri.Chain{
 	yuri.Bitcoin,
 	yuri.Litecoin,
+	yuri.Dogecoin,
 	yuri.Ethereum,
 	yuri.BNB,
+	yuri.Polygon,
+	yuri.Avalanche,
+	yuri.Arbitrum,
+	yuri.Base,
+	yuri.Optimism,
+	yuri.Fantom,
 	yuri.Monero,
 	// NOTE: TON and SOL are handled explicitly in ParseConfig as they
 	// require a wallet output directory
@@ -44,11 +51,18 @@ var supportedChainNames = []yuri.Chain{
 }
 
 var supportedChains = map[yuri.Chain]func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider{
-	yuri.Bitcoin:  func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewBitcoin(rpc) },
-	yuri.Litecoin: func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewLitecoin(rpc) },
-	yuri.Ethereum: func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewEthereum(rpc) },
-	yuri.BNB:      func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewBNB(rpc) },
-	yuri.Monero:   func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewMonero(rpc) },
+	yuri.Bitcoin:   func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewBitcoin(rpc) },
+	yuri.Litecoin:  func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewLitecoin(rpc) },
+	yuri.Dogecoin:  func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewDogecoin(rpc) },
+	yuri.Ethereum:  func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewEthereum(rpc) },
+	yuri.BNB:       func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewBNB(rpc) },
+	yuri.Polygon:   func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewPolygon(rpc) },
+	yuri.Avalanche: func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewAvalanche(rpc) },
+	yuri.Arbitrum:  func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewArbitrum(rpc) },
+	yuri.Base:      func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewBase(rpc) },
+	yuri.Optimism:  func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewOptimism(rpc) },
+	yuri.Fantom:    func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewFantom(rpc) },
+	yuri.Monero:    func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewMonero(rpc) },
 }
 
 var supportedPricingProviders map[string]func(c *http.Client) yuri.PriceProvider = map[string]func(c *http.Client) yuri.PriceProvider{

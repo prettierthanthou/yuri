@@ -10,6 +10,7 @@ import (
 
 const Bitcoin Chain = "bitcoin"
 const Litecoin Chain = "litecoin"
+const Dogecoin Chain = "dogecoin"
 
 var _ CryptoProvider = bitcoinLike{}
 var _ PricingSymbolProvider = bitcoinLike{}
@@ -25,6 +26,13 @@ func NewLitecoin(rpcConf JsonRpcClientConfig) bitcoinLike {
 	return bitcoinLike{
 		jsonRpc: NewJsonRpcClient(rpcConf),
 		chain:   Litecoin,
+	}
+}
+
+func NewDogecoin(rpcConf JsonRpcClientConfig) bitcoinLike {
+	return bitcoinLike{
+		jsonRpc: NewJsonRpcClient(rpcConf),
+		chain:   Dogecoin,
 	}
 }
 
@@ -52,6 +60,8 @@ func (b bitcoinLike) PriceSymbol() string {
 		return "BTC"
 	case Litecoin:
 		return "LTC"
+	case Dogecoin:
+		return "DOGE"
 	default:
 		return strings.ToUpper(string(b.chain))
 	}

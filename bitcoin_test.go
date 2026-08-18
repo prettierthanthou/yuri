@@ -120,6 +120,34 @@ func TestBitcoinLikeForLTCPriceSymbol(t *testing.T) {
 	}
 }
 
+func TestDogecoinChain(t *testing.T) {
+	d := NewDogecoin(JsonRpcClientConfig{})
+	if d.Chain() != Dogecoin {
+		t.Fatalf("expected Dogecoin chain")
+	}
+}
+
+func TestDogecoinPriceSymbol(t *testing.T) {
+	d := NewDogecoin(JsonRpcClientConfig{})
+	if d.PriceSymbol() != "DOGE" {
+		t.Fatalf("Dogecoin PriceSymbol expected = DOGE got = %s", d.PriceSymbol())
+	}
+}
+
+func TestDogecoinDecimals(t *testing.T) {
+	d := NewDogecoin(JsonRpcClientConfig{})
+	if d.Decimals() != 8 {
+		t.Fatalf("expected 8 decimals")
+	}
+}
+
+func TestDogecoinDoesntSupportNFTs(t *testing.T) {
+	d := NewDogecoin(JsonRpcClientConfig{})
+	if d.SupportsNFTs() {
+		t.Fatal("Dogecoin should not support NFTs")
+	}
+}
+
 func TestBitcoinLikePriceSymbolForRandom(t *testing.T) {
 	const symbol = "RANDOM"
 	random := bitcoinLike{chain: Chain(symbol)}

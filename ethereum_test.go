@@ -88,6 +88,102 @@ func TestEthereumLikeChainAndSymbol(t *testing.T) {
 	}
 }
 
+func TestPolygonChainAndSymbol(t *testing.T) {
+	p := NewPolygon(JsonRpcClientConfig{})
+
+	if p.chain != Polygon {
+		t.Fatalf("Polygon expected chain = %s got %s", Polygon, p.chain)
+	}
+
+	if p.symbol != "MATIC" {
+		t.Fatalf("Polygon expected symbol = MATIC got %s", p.symbol)
+	}
+
+	if p.Decimals() != 18 {
+		t.Fatalf("Polygon expected 18 decimals")
+	}
+}
+
+func TestAvalancheChainAndSymbol(t *testing.T) {
+	a := NewAvalanche(JsonRpcClientConfig{})
+
+	if a.chain != Avalanche {
+		t.Fatalf("Avalanche expected chain = %s got %s", Avalanche, a.chain)
+	}
+
+	if a.symbol != "AVAX" {
+		t.Fatalf("Avalanche expected symbol = AVAX got %s", a.symbol)
+	}
+
+	if a.Decimals() != 18 {
+		t.Fatalf("Avalanche expected 18 decimals")
+	}
+}
+
+func TestArbitrumChainAndSymbol(t *testing.T) {
+	a := NewArbitrum(JsonRpcClientConfig{})
+
+	if a.chain != Arbitrum {
+		t.Fatalf("Arbitrum expected chain = %s got %s", Arbitrum, a.chain)
+	}
+
+	if a.symbol != "ETH" {
+		t.Fatalf("Arbitrum expected symbol = ETH got %s", a.symbol)
+	}
+
+	if a.Decimals() != 18 {
+		t.Fatalf("Arbitrum expected 18 decimals")
+	}
+}
+
+func TestBaseChainAndSymbol(t *testing.T) {
+	b := NewBase(JsonRpcClientConfig{})
+
+	if b.chain != Base {
+		t.Fatalf("Base expected chain = %s got %s", Base, b.chain)
+	}
+
+	if b.symbol != "ETH" {
+		t.Fatalf("Base expected symbol = ETH got %s", b.symbol)
+	}
+
+	if b.Decimals() != 18 {
+		t.Fatalf("Base expected 18 decimals")
+	}
+}
+
+func TestOptimismChainAndSymbol(t *testing.T) {
+	o := NewOptimism(JsonRpcClientConfig{})
+
+	if o.chain != Optimism {
+		t.Fatalf("Optimism expected chain = %s got %s", Optimism, o.chain)
+	}
+
+	if o.symbol != "ETH" {
+		t.Fatalf("Optimism expected symbol = ETH got %s", o.symbol)
+	}
+
+	if o.Decimals() != 18 {
+		t.Fatalf("Optimism expected 18 decimals")
+	}
+}
+
+func TestFantomChainAndSymbol(t *testing.T) {
+	f := NewFantom(JsonRpcClientConfig{})
+
+	if f.chain != Fantom {
+		t.Fatalf("Fantom expected chain = %s got %s", Fantom, f.chain)
+	}
+
+	if f.symbol != "FTM" {
+		t.Fatalf("Fantom expected symbol = FTM got %s", f.symbol)
+	}
+
+	if f.Decimals() != 18 {
+		t.Fatalf("Fantom expected 18 decimals")
+	}
+}
+
 func TestEthereumSupportsNFTs(t *testing.T) {
 	eth := NewEthereum(JsonRpcClientConfig{})
 
