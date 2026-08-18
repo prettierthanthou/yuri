@@ -566,3 +566,81 @@ func getActive(t *testing.T, api *API, chain string) *httptest.ResponseRecorder 
 	api.handleActive(w, req)
 	return w
 }
+
+func TestActive_CanonicalizesChainCasing(t *testing.T) {
+	api := newTestAPI(t)
+
+	body := []byte(`{"chain":"ethereum","amount_fiat":{"currency":{"code":"EUR","decimals":2},"minor":500}}`)
+	req := httptest.NewRequest("POST", yuridTestUrl+"/new", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+
+	api.handleNew(w, req)
+
+	resp := w.Result()
+	b, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		t.Fatalf("StatusCode = %d expected = 200 (body = %s)", resp.StatusCode, b)
+	}
+
+	var created struct {
+		Id string `json:"id"`
+	}
+	if err := json.Unmarshal(b, &created); err != nil {
+		t.Fatal(err)
+	}
+
+	active := getActive(t, api, "Ethereum")
+	activeBody, _ := io.ReadAll(active.Result().Body)
+	if active.Result().StatusCode != 200 {
+		t.Fatalf("active StatusCode = %d expected = 200 (body = %s)", active.Result().StatusCode, activeBody)
+	}
+
+	var activeInvoices map[string]json.RawMessage
+	if err := json.Unmarshal(activeBody, &activeInvoices); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := activeInvoices[created.Id]; !ok {
+		t.Fatalf("invoice %s was not found in active invoices for chain Ethereum", created.Id)
+	}
+}
+
+func TestNew_CanonicalizesChainCasing(t *testing.T) {
+	api := newTestAPI(t)
+
+	body := []byte(`{"chain":"Ethereum","amount_fiat":{"currency":{"code":"EUR","decimals":2},"minor":500}}`)
+	req := httptest.NewRequest("POST", yuridTestUrl+"/new", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+
+	api.handleNew(w, req)
+
+	resp := w.Result()
+	b, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		t.Fatalf("StatusCode = %d expected = 200 (body = %s)", resp.StatusCode, b)
+	}
+
+	var created struct {
+		Id    string `json:"id"`
+		Chain string `json:"chain"`
+	}
+	if err := json.Unmarshal(b, &created); err != nil {
+		t.Fatal(err)
+	}
+	if created.Chain != string(yuri.Ethereum) {
+		t.Fatalf("Chain = %q expected = %q", created.Chain, yuri.Ethereum)
+	}
+
+	active := getActive(t, api, string(yuri.Ethereum))
+	activeBody, _ := io.ReadAll(active.Result().Body)
+	if active.Result().StatusCode != 200 {
+		t.Fatalf("active StatusCode = %d expected = 200 (body = %s)", active.Result().StatusCode, activeBody)
+	}
+
+	var activeInvoices map[string]json.RawMessage
+	if err := json.Unmarshal(activeBody, &activeInvoices); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := activeInvoices[created.Id]; !ok {
+		t.Fatalf("invoice %s was not found in active invoices for chain %s", created.Id, yuri.Ethereum)
+	}
+}

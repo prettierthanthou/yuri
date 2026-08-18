@@ -166,7 +166,7 @@ func (a *API) handleActive(w http.ResponseWriter, r *http.Request) {
 	foundChain := ""
 	for _, activeChain := range a.activeChainNames {
 		if strings.EqualFold(activeChain, chainStr) {
-			foundChain = chainStr
+			foundChain = activeChain
 			break
 		}
 	}
@@ -230,6 +230,7 @@ func (a *API) handleNew(w http.ResponseWriter, r *http.Request) {
 	for _, activeChain := range a.activeChainNames {
 		if strings.EqualFold(activeChain, string(req.Chain)) {
 			registeredChain = true
+			req.Chain = yuri.Chain(activeChain)
 			break
 		}
 	}
