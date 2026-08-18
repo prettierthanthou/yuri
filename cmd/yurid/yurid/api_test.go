@@ -604,6 +604,103 @@ func TestActive_CanonicalizesChainCasing(t *testing.T) {
 	}
 }
 
+func postNew(t *testing.T, api *API, body []byte) (*http.Response, []byte) {
+	t.Helper()
+
+	req := httptest.NewRequest("POST", yuridTestUrl+"/new", bytes.NewReader(body))
+	req.RemoteAddr = "192.0.2.4:1234"
+	w := httptest.NewRecorder()
+
+	api.handleNew(w, req)
+
+	resp := w.Result()
+	b, _ := io.ReadAll(resp.Body)
+	return resp, b
+}
+
+func TestNew_IdempotencyKey(t *testing.T) {
+	api := newTestAPI(t)
+
+	body := []byte(`{"chain":"ethereum","amount_fiat":{"currency":{"code":"EUR","decimals":2},"minor":500},"id":"order-1234"}`)
+
+	resp1, b1 := postNew(t, api, body)
+	if resp1.StatusCode != http.StatusOK {
+		t.Fatalf("first StatusCode = %d expected = 200 (body = %s)", resp1.StatusCode, b1)
+	}
+
+	var first struct {
+		Id string `json:"id"`
+	}
+	if err := json.Unmarshal(b1, &first); err != nil {
+		t.Fatal(err)
+	}
+
+	resp2, b2 := postNew(t, api, body)
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("second StatusCode = %d expected = 200 (body = %s)", resp2.StatusCode, b2)
+	}
+
+	var second struct {
+		Id string `json:"id"`
+	}
+	if err := json.Unmarshal(b2, &second); err != nil {
+		t.Fatal(err)
+	}
+
+	if second.Id != first.Id {
+		t.Fatalf("second Id = %q expected = %q (same invoice)", second.Id, first.Id)
+	}
+
+	active := getActive(t, api, string(yuri.Ethereum))
+	activeBody, _ := io.ReadAll(active.Result().Body)
+	if active.Result().StatusCode != 200 {
+		t.Fatalf("active StatusCode = %d expected = 200 (body = %s)", active.Result().StatusCode, activeBody)
+	}
+
+	var activeInvoices map[string]json.RawMessage
+	if err := json.Unmarshal(activeBody, &activeInvoices); err != nil {
+		t.Fatal(err)
+	}
+	if len(activeInvoices) != 1 {
+		t.Fatalf("len(activeInvoices) = %d expected = 1", len(activeInvoices))
+	}
+	if _, ok := activeInvoices[first.Id]; !ok {
+		t.Fatalf("invoice %s was not found in active invoices", first.Id)
+	}
+}
+
+func TestNew_StripsReservedMetadataKeys(t *testing.T) {
+	api := newTestAPI(t)
+
+	body := []byte(`{"chain":"ethereum","amount_fiat":{"currency":{"code":"EUR","decimals":2},"minor":500},"metadata":{"yurid-foo":"bar","client-key":"keep"}}`)
+
+	resp, b := postNew(t, api, body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("StatusCode = %d expected = 200 (body = %s)", resp.StatusCode, b)
+	}
+
+	var created struct {
+		Id string `json:"id"`
+	}
+	if err := json.Unmarshal(b, &created); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	inv, err := api.storage.GetInvoiceByID(ctx, created.Id)
+	if err != nil {
+		t.Fatalf("failed to fetch stored invoice: %+v", err)
+	}
+
+	if _, ok := inv.Metadata["yurid-foo"]; ok {
+		t.Fatalf("stored invoice metadata contains reserved key yurid-foo: %#v", inv.Metadata)
+	}
+	if inv.Metadata["client-key"] != "keep" {
+		t.Fatalf("stored invoice metadata missing non-reserved key: %#v", inv.Metadata)
+	}
+}
+
 func TestNew_CanonicalizesChainCasing(t *testing.T) {
 	api := newTestAPI(t)
 

@@ -112,6 +112,8 @@ func decodeJSON(r *http.Request, dst any) error {
 
 const maxRequestBodySize = 1 << 20 // 1 MiB
 
+const yuridInvoiceIdempotencyMetaID = "yurid-idempotency"
+
 type wrappedInvoice struct {
 	Id   string `json:"id"`
 	Paid bool   `json:"paid"`
@@ -209,9 +211,40 @@ func (a *API) handleActive(w http.ResponseWriter, r *http.Request) {
 
 type WrappedInvoiceCreate struct {
 	yuri.InvoiceCreate
+	// Id is an optional client-supplied idempotency key. A repeated /new
+	// with the same Id returns the existing invoice.
+	Id string `json:"id"`
 	// ExpiresAt is the expiry time in unix milliseconds. If no time is provided
 	// it will default to 30m.
 	ExpiresAt int64 `json:"expires_at"`
+}
+
+// respondWithInvoice reads the invoice uuid from inv's metadata and
+// writes its wrapped form.
+func (a *API) respondWithInvoice(w http.ResponseWriter, inv *yuri.Invoice) {
+	rawId, ok := inv.Metadata[yuridInvoiceUUIDMetaId]
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "failed to get invoice ID from metadata", nil)
+		return
+	}
+
+	var id string
+	switch v := rawId.(type) {
+	case uuid.UUID:
+		id = v.String()
+	case string:
+		parsed, err := uuid.Parse(v)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to cast internal invoice uuid from metadata to UUID", err)
+			return
+		}
+		id = parsed.String()
+	default:
+		writeError(w, http.StatusInternalServerError, "failed to cast internal invoice uuid from metadata to UUID", nil)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, a.wrapInvoice(id, inv))
 }
 
 func (a *API) handleNew(w http.ResponseWriter, r *http.Request) {
@@ -257,6 +290,29 @@ func (a *API) handleNew(w http.ResponseWriter, r *http.Request) {
 		req.Metadata = map[string]any{}
 	}
 
+	for key := range req.Metadata {
+		if strings.HasPrefix(key, "yurid-") {
+			delete(req.Metadata, key)
+		}
+	}
+
+	if req.Id != "" {
+		activeInvoices, err := a.storage.GetActiveInvoices(ctx, req.Chain)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to fetch invoices", err)
+			return
+		}
+
+		for i := range activeInvoices {
+			if seenId, ok := activeInvoices[i].Metadata[yuridInvoiceIdempotencyMetaID]; ok && seenId == req.Id {
+				a.respondWithInvoice(w, &activeInvoices[i])
+				return
+			}
+		}
+
+		req.Metadata[yuridInvoiceIdempotencyMetaID] = req.Id
+	}
+
 	req.Metadata[yuridInvoiceFiatMetaID] = req.AmountFiat
 	if req.ExpiresAt != 0 {
 		req.Metadata[yuridInvoiceExpireyMetaID] = time.UnixMilli(req.ExpiresAt)
@@ -267,19 +323,7 @@ func (a *API) handleNew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rawId, ok := inv.Metadata[yuridInvoiceUUIDMetaId]
-	if !ok {
-		writeError(w, http.StatusInternalServerError, "failed to get invoice ID from metadata", nil)
-		return
-	}
-
-	id, ok := rawId.(uuid.UUID)
-	if !ok {
-		writeError(w, http.StatusInternalServerError, "failed to cast internal invoice uuid from metadata to UUID", nil)
-		return
-	}
-
-	writeJSON(w, http.StatusOK, a.wrapInvoice(id.String(), &inv))
+	a.respondWithInvoice(w, &inv)
 }
 
 func (a *API) handleGet(w http.ResponseWriter, r *http.Request) {
