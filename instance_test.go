@@ -1127,3 +1127,176 @@ func (b *blockingPriceProvider) Get(_ context.Context, _ Currency, _ string, _ T
 	<-b.unblock
 	return 0, errors.New("unblocked")
 }
+
+// Poll and pricing must survive provider panics.
+
+var _ CryptoProvider = &panickingPollProvider{}
+
+type panickingPollProvider struct {
+	mu    sync.Mutex
+	calls int
+}
+
+func (p *panickingPollProvider) Poll(_ context.Context, _ []Invoice) ([]Invoice, error) {
+	p.mu.Lock()
+	p.calls++
+	calls := p.calls
+	p.mu.Unlock()
+
+	if calls == 1 {
+		panic("poll explosion")
+	}
+
+	return nil, nil
+}
+
+func (p *panickingPollProvider) SupportsNFTs() bool {
+	return false
+}
+
+func (p *panickingPollProvider) Chain() Chain {
+	return Chain("test")
+}
+
+func (p *panickingPollProvider) CreateAddress(context.Context) (string, error) {
+	return "", nil
+}
+
+func (p *panickingPollProvider) Decimals() int64 {
+	return 12
+}
+
+func (p *panickingPollProvider) Calls() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.calls
+}
+
+func TestInstanceRunRecoversFromPollPanic(t *testing.T) {
+	provider := &panickingPollProvider{}
+
+	var reportedErr error
+	var reportedMu sync.Mutex
+
+	instance, err := New(Options{
+		PollEvery:       10 * time.Millisecond,
+		MaxPollDuration: 100 * time.Millisecond,
+		Storage:         &pollStorage{},
+		Pricing: []PriceProvider{
+			testingFixedPriceProvider{price: 100},
+		},
+		Chains: []CryptoProvider{
+			provider,
+		},
+		Hooks: Hooks{
+			OnError: func(err error) {
+				reportedMu.Lock()
+				defer reportedMu.Unlock()
+				reportedErr = err
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		instance.Run(ctx)
+	}()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if provider.Calls() >= 2 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("Run() did not exit after cancellation")
+	}
+
+	if provider.Calls() < 2 {
+		t.Fatalf(
+			"provider was polled %d times, expected a successful poll after the panic",
+			provider.Calls(),
+		)
+	}
+
+	reportedMu.Lock()
+	defer reportedMu.Unlock()
+	if reportedErr == nil {
+		t.Fatal("expected panic to be reported via Hooks.OnError")
+	}
+
+	if !strings.Contains(reportedErr.Error(), "panic") {
+		t.Fatalf("reported error = %q expected it to mention the panic", reportedErr)
+	}
+}
+
+var _ PriceProvider = &panickingPriceProvider{}
+
+type panickingPriceProvider struct{}
+
+func (panickingPriceProvider) WantsFullChainName() bool {
+	return true
+}
+
+func (panickingPriceProvider) Get(_ context.Context, _ Currency, _ string, _ Token) (int64, error) {
+	panic("pricing explosion")
+}
+
+func TestNewInvoiceRecoversFromPriceProviderPanic(t *testing.T) {
+	instance, err := New(Options{
+		Storage: &InMemoryStorage{},
+		Pricing: []PriceProvider{
+			panickingPriceProvider{},
+		},
+		Chains: []CryptoProvider{
+			&testingFakeCryptoProvider{},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = instance.NewInvoice(t.Context(), InvoiceCreate{
+		Chain:      Chain("test"),
+		AmountFiat: USD.Of(3.50),
+	})
+	if !errHasSubstr(t, err, "panic") {
+		return
+	}
+
+	sane, err := New(Options{
+		Storage: &InMemoryStorage{},
+		Pricing: []PriceProvider{
+			testingFixedPriceProvider{price: 100},
+		},
+		Chains: []CryptoProvider{
+			&testingFakeCryptoProvider{},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	inv, err := sane.NewInvoice(t.Context(), InvoiceCreate{
+		Chain:      Chain("test"),
+		AmountFiat: USD.Of(3.50),
+	})
+	if err != nil {
+		t.Fatalf("NewInvoice() error = %q wanted nil", err)
+	}
+
+	if inv.Address != "fake_test_addr" {
+		t.Fatalf("Address = %s expected fake_test_addr", inv.Address)
+	}
+}

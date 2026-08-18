@@ -112,6 +112,12 @@ func (i *Instance) Run(ctx context.Context) {
 		) {
 			defer wg.Done()
 
+			defer func() {
+				if r := recover(); r != nil {
+					i.reportErr(fmt.Errorf("panic in chain poller (%s): %v", chain, r))
+				}
+			}()
+
 			i.runChain(ctx, chain, provider)
 		}(chain, provider)
 	}
@@ -129,7 +135,15 @@ func (i *Instance) runChain(
 
 	for {
 		derivedCtx, cancel := context.WithTimeout(ctx, i.opts.MaxPollDuration)
-		if err := i.poll(derivedCtx, chain, provider); err != nil {
+		err := func() (err error) {
+			defer func() {
+				if r := recover(); r != nil {
+					err = fmt.Errorf("panic during poll: %v", r)
+				}
+			}()
+			return i.poll(derivedCtx, chain, provider)
+		}()
+		if err != nil {
 			i.reportErr(fmt.Errorf("poll (%s): %+v", chain, err))
 		}
 		cancel()
@@ -182,28 +196,36 @@ func (i *Instance) getPrice(ctx context.Context, currency Currency, chain Crypto
 	var wg sync.WaitGroup
 	for _, p := range i.opts.Pricing {
 		wg.Go(func() {
-			select {
-			case <-ctx.Done():
-				priceQuoteChan <- PriceQuote{Err: ctx.Err(), FiatMinorUnits: -1}
-				return
-			default:
-			}
+			q := func() (q PriceQuote) {
+				defer func() {
+					if r := recover(); r != nil {
+						q = PriceQuote{Err: fmt.Errorf("panic in price provider: %v", r), FiatMinorUnits: -1}
+					}
+				}()
 
-			priceSymbol := string(chain.Chain())
-			if !p.WantsFullChainName() {
-				priceSymbol = pricingSymbol(chain)
-			}
+				select {
+				case <-ctx.Done():
+					return PriceQuote{Err: ctx.Err(), FiatMinorUnits: -1}
+				default:
+				}
 
-			price, err := p.Get(ctx, currency, priceSymbol, token)
-			if err != nil {
-				priceQuoteChan <- PriceQuote{Err: err, FiatMinorUnits: -1}
-				return
-			}
+				priceSymbol := string(chain.Chain())
+				if !p.WantsFullChainName() {
+					priceSymbol = pricingSymbol(chain)
+				}
 
-			priceQuoteChan <- PriceQuote{
-				Err:            nil,
-				FiatMinorUnits: price,
-			}
+				price, err := p.Get(ctx, currency, priceSymbol, token)
+				if err != nil {
+					return PriceQuote{Err: err, FiatMinorUnits: -1}
+				}
+
+				return PriceQuote{
+					Err:            nil,
+					FiatMinorUnits: price,
+				}
+			}()
+
+			priceQuoteChan <- q
 		})
 	}
 
@@ -218,7 +240,23 @@ func (i *Instance) getPrice(ctx context.Context, currency Currency, chain Crypto
 		return 0, errors.New("no providers returned prices")
 	}
 
-	return i.opts.PriceAggregator.Aggregate(ctx, quotes)
+	price, err := i.opts.PriceAggregator.Aggregate(ctx, quotes)
+	if err != nil {
+		quoteErrs := make([]string, 0, len(quotes))
+		for _, q := range quotes {
+			if q.Err != nil {
+				quoteErrs = append(quoteErrs, q.Err.Error())
+			}
+		}
+
+		if len(quoteErrs) > 0 {
+			return 0, fmt.Errorf("failed to aggregate prices: %+v (provider errors: %s)", err, strings.Join(quoteErrs, "; "))
+		}
+
+		return 0, err
+	}
+
+	return price, nil
 }
 
 func pricingSymbol(provider CryptoProvider) string {
