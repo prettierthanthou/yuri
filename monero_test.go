@@ -46,7 +46,7 @@ func moneroHelperCreateFullEnv(t *testing.T) (cModerod *yuritest.Container, cWal
 	})
 
 	makeAndOpenWallet := func(wallet string) (*yuritest.Container, JsonRpcClient) {
-		cWalletd = env.Run(yuritest.Spec{
+		cwd := env.Run(yuritest.Spec{
 			Name:       t.Name() + "-walletd" + "-" + wallet,
 			Image:      moneroTestImage,
 			Entrypoint: []string{"monero-wallet-rpc"},
@@ -66,31 +66,49 @@ func moneroHelperCreateFullEnv(t *testing.T) (cModerod *yuritest.Container, cWal
 			Wait:   wait.ForListeningPort("28083/tcp"),
 		})
 
-		walletJsonRpc = NewJsonRpcClient(JsonRpcClientConfig{Host: cWalletd.HTTP() + "/json_rpc", NonB64BasicAuth: true})
-		_, err := walletJsonRpc.Do(context.Background(), JsonRpcRequest{
-			Method: "create_wallet",
-			Params: map[string]any{
-				"filename": wallet,
-				"language": "English",
-			},
-		})
+		wj := NewJsonRpcClient(JsonRpcClientConfig{Host: cwd.HTTP() + "/json_rpc", NonB64BasicAuth: true})
 
-		if err != nil && !strings.Contains(err.Error(), "Already exists.") {
-			t.Fatalf("create_wallet err = %q", err)
+		// The wallet RPC server can accept a TCP connection before its HTTP
+		// handler is ready, causing transient "connection reset by peer" errors.
+		// Retry the wallet bootstrap calls until the server responds.
+		moneroWalletRetry := func(method string, params map[string]any, fatalPrefixes ...string) {
+			t.Helper()
+
+			var lastErr error
+			for attempt := 0; attempt < 60; attempt++ {
+				_, err := wj.Do(context.Background(), JsonRpcRequest{Method: method, Params: params})
+				if err == nil {
+					return
+				}
+
+				accepted := false
+				for _, p := range fatalPrefixes {
+					if strings.Contains(err.Error(), p) {
+						accepted = true
+						break
+					}
+				}
+				if accepted {
+					return
+				}
+
+				lastErr = err
+				time.Sleep(500 * time.Millisecond)
+			}
+
+			t.Fatalf("%s err = %q", method, lastErr)
 		}
 
-		_, err = walletJsonRpc.Do(context.Background(), JsonRpcRequest{
-			Method: "open_wallet",
-			Params: map[string]any{
-				"filename": wallet,
-			},
+		moneroWalletRetry("create_wallet", map[string]any{
+			"filename": wallet,
+			"language": "English",
+		}, "Already exists.")
+
+		moneroWalletRetry("open_wallet", map[string]any{
+			"filename": wallet,
 		})
 
-		if err != nil {
-			t.Fatalf("open_wallet err = %q", err)
-		}
-
-		return cWalletd, walletJsonRpc
+		return cwd, wj
 	}
 
 	cWalletd, walletJsonRpc = makeAndOpenWallet("yuri-monero-test-wallet")
@@ -182,8 +200,18 @@ func TestPollMonero(t *testing.T) {
 	}
 
 	start := time.Now()
-	moneroGenerateBlocks(t, daemonJsonRpc, getCustomerAddressResp.Address, 30)
-	t.Log("30 blocks:", time.Since(start))
+	// Mine enough blocks for the customer to accumulate many unlocked coinbase
+	// outputs. Monero locks each coinbase for 60 confirmations, and a single
+	// unlocked coinbase output cannot be spent by monero-wallet-rpc's transfer
+	// ("not enough outputs to use"). Mining 120 blocks unlocks ~60 outputs.
+	moneroGenerateBlocks(t, daemonJsonRpc, getCustomerAddressResp.Address, 120)
+	t.Log("120 blocks:", time.Since(start))
+
+	if _, err := customerJsonRpc.Do(context.Background(), JsonRpcRequest{
+		Method: "refresh",
+	}); err != nil {
+		t.Fatalf("customerJsonRpc(refresh pre-transfer): %+v", err)
+	}
 
 	monero := NewMonero(merchantJsonRpc.conf)
 	merchantAddr, err := monero.CreateAddress(context.Background())
