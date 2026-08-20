@@ -9,6 +9,7 @@ require (
 	github.com/go-sql-driver/mysql v1.10.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
+	github.com/r3labs/sse/v2 v2.10.0
 	golang.org/x/net v0.56.0
 	modernc.org/sqlite v1.54.0
 )
@@ -29,6 +30,7 @@ require (
 	golang.org/x/sync v0.21.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/text v0.38.0 // indirect
+	gopkg.in/cenkalti/backoff.v1 v1.1.0 // indirect
 	modernc.org/libc v1.74.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect

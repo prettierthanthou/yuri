@@ -53,14 +53,16 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	events := yurid.NewEventServer()
+
 	instance, err := yuri.New(yuri.Options{
 		Hooks: yuri.Hooks{
 			OnError: func(err error) {
 				slog.Error("Something went wrong during cycle!", "err", err)
 			},
 			OnInvoiceUpdated: func(ctx context.Context, i yuri.Invoice) error {
-				// TODO: maybe send down events via SSE or something? idk
 				slog.Debug("invoice updated", "invoice", i)
+				events.PublishInvoice(&i)
 				return nil
 			},
 		},
@@ -86,7 +88,7 @@ func main() {
 		activeChainNames = append(activeChainNames, string(chain.Chain()))
 	}
 
-	api := yurid.NewAPI(database, instance, activeChainNames, conf.APIToken)
+	api := yurid.NewAPI(database, instance, activeChainNames, conf.APIToken, events)
 
 	srv := &http.Server{
 		Addr:              conf.Addr,
@@ -118,6 +120,7 @@ func main() {
 		slog.Warn("poller did not stop in time, continuing shutdown")
 	}
 
+	events.Close()
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
 

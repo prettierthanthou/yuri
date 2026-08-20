@@ -23,18 +23,20 @@ type API struct {
 	mux              *http.ServeMux
 	activeChainNames []string
 	apiToken         string
+	events           *eventServer
 }
 
-func NewAPI(database Database, instance *yuri.Instance, activeChainNames []string, apiToken string) *API {
+func NewAPI(database Database, instance *yuri.Instance, activeChainNames []string, apiToken string, events *eventServer) *API {
 	api := &API{
 		storage:          database,
 		instance:         instance,
 		mux:              http.NewServeMux(),
 		activeChainNames: activeChainNames,
 		apiToken:         apiToken,
+		events:           events,
 	}
 
-	api.routes()
+	api.registerRoutes()
 	return api
 }
 
@@ -42,11 +44,12 @@ func (a *API) Handler() http.Handler {
 	return a.mux
 }
 
-func (a *API) routes() {
+func (a *API) registerRoutes() {
 	a.mux.HandleFunc("/sample", a.requireAuth(a.handleSample))
 	a.mux.HandleFunc("/active", a.requireAuth(a.handleActive))
 	a.mux.HandleFunc("/get", a.requireAuth(a.handleGet))
 	a.mux.HandleFunc("/new", a.requireAuth(a.handleNew))
+	a.mux.HandleFunc("/events", a.requireAuth(a.events.ServeHTTP))
 }
 
 // canonicalChain resolves name (case-insensitively) to the canonical name
@@ -57,6 +60,7 @@ func (a *API) canonicalChain(name string) (yuri.Chain, bool) {
 			return yuri.Chain(active), true
 		}
 	}
+
 	return "", false
 }
 
@@ -118,7 +122,7 @@ type wrappedInvoice struct {
 	yuri.Invoice
 }
 
-func (a *API) wrapInvoice(id string, inv *yuri.Invoice) wrappedInvoice {
+func wrapInvoice(id string, inv *yuri.Invoice) wrappedInvoice {
 	cloned := inv.Clone()
 	fiat := cloned.Metadata[yuridInvoiceFiatMetaID]
 	delete(cloned.Metadata, yuridInvoiceUUIDMetaId)
@@ -205,7 +209,7 @@ func (a *API) handleActive(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		wrapped[id] = a.wrapInvoice(id, &inv)
+		wrapped[id] = wrapInvoice(id, &inv)
 	}
 
 	writeJSON(w, http.StatusOK, wrapped)
@@ -229,7 +233,7 @@ func (a *API) respondWithInvoice(w http.ResponseWriter, inv *yuri.Invoice) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, a.wrapInvoice(id, inv))
+	writeJSON(w, http.StatusOK, wrapInvoice(id, inv))
 }
 
 func (a *API) handleNew(w http.ResponseWriter, r *http.Request) {
@@ -331,5 +335,5 @@ func (a *API) handleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, a.wrapInvoice(id, inv))
+	writeJSON(w, http.StatusOK, wrapInvoice(id, inv))
 }

@@ -1,14 +1,17 @@
 package yurid
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,7 +37,6 @@ func jsonCompare(t *testing.T, got, want []byte) {
 	}
 }
 
-// fakeChain always succeeds at creating addresses, unlike real providers.
 type fakeChain struct{}
 
 func (fakeChain) Chain() yuri.Chain { return yuri.Ethereum }
@@ -74,7 +76,10 @@ func newTestAPIWith(t *testing.T, chain yuri.CryptoProvider, token string) *API 
 		t.Fatalf("instance = %+v", err)
 	}
 
-	return NewAPI(db, instance, []string{string(yuri.Ethereum)}, token)
+	events := NewEventServer()
+	t.Cleanup(events.Close)
+
+	return NewAPI(db, instance, []string{string(yuri.Ethereum)}, token, events)
 }
 
 func TestSample(t *testing.T) {
@@ -534,5 +539,285 @@ func TestNew_CanonicalizesChainCasing(t *testing.T) {
 	}
 	if _, ok := activeInvoices[created.Id]; !ok {
 		t.Fatalf("invoice %s was not found in active invoices for chain %s", created.Id, yuri.Ethereum)
+	}
+}
+
+func TestEvents_RequiresGetMethod(t *testing.T) {
+	api := newTestAPI(t)
+
+	req := httptest.NewRequest("POST", yuridTestUrl+"/events", nil)
+	w := httptest.NewRecorder()
+
+	api.Handler().ServeHTTP(w, req)
+	if w.Result().StatusCode != 405 {
+		t.Fatalf("StatusCode = %d expected = 405", w.Result().StatusCode)
+	}
+}
+
+func TestEvents_UnknownStream(t *testing.T) {
+	api := newTestAPI(t)
+
+	req := httptest.NewRequest("GET", yuridTestUrl+"/events?stream=bogus", nil)
+	w := httptest.NewRecorder()
+
+	api.Handler().ServeHTTP(w, req)
+	if w.Result().StatusCode != 404 {
+		t.Fatalf("StatusCode = %d expected = 404", w.Result().StatusCode)
+	}
+}
+
+func TestEvents_RequiresAuth(t *testing.T) {
+	api := newTestAPIWith(t, fakeChain{}, "sekrit")
+
+	req := httptest.NewRequest("GET", yuridTestUrl+"/events", nil)
+	w := httptest.NewRecorder()
+
+	api.Handler().ServeHTTP(w, req)
+	if w.Result().StatusCode != 401 {
+		t.Fatalf("StatusCode = %d expected = 401", w.Result().StatusCode)
+	}
+}
+
+// sseFrame is a single parsed SSE event from the wire.
+type sseFrame struct {
+	id   string
+	typ  string
+	data string
+}
+
+// streamFrames parses SSE frames from a response body until it is closed.
+func streamFrames(t *testing.T, resp *http.Response) <-chan sseFrame {
+	t.Helper()
+
+	frames := make(chan sseFrame, 16)
+	go func() {
+		defer close(frames)
+
+		sc := bufio.NewScanner(resp.Body)
+		var cur *sseFrame
+		for sc.Scan() {
+			line := sc.Text()
+			if line == "" {
+				if cur != nil {
+					frames <- *cur
+					cur = nil
+				}
+				continue
+			}
+
+			if strings.HasPrefix(line, ":") {
+				// comment (e.g. heartbeat ping), carries no event
+				continue
+			}
+
+			if cur == nil {
+				cur = &sseFrame{}
+			}
+			switch {
+			case strings.HasPrefix(line, "id: "):
+				cur.id = strings.TrimPrefix(line, "id: ")
+			case strings.HasPrefix(line, "event: "):
+				cur.typ = strings.TrimPrefix(line, "event: ")
+			case strings.HasPrefix(line, "data: "):
+				cur.data = strings.TrimPrefix(line, "data: ")
+			}
+		}
+	}()
+
+	return frames
+}
+
+func nextFrame(t *testing.T, frames <-chan sseFrame) sseFrame {
+	t.Helper()
+
+	select {
+	case f, ok := <-frames:
+		if !ok {
+			t.Fatal("events stream closed early")
+		}
+		return f
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for SSE frame")
+		return sseFrame{}
+	}
+}
+
+func testInvoice(paid bool) *yuri.Invoice {
+	id, err := uuid.NewV7()
+	if err != nil {
+		panic(err)
+	}
+
+	amountPaid := big.NewInt(500)
+	if paid {
+		amountPaid = big.NewInt(1000)
+	}
+
+	return &yuri.Invoice{
+		Chain:      yuri.Ethereum,
+		Address:    "0xabc",
+		Token:      yuri.EthereumUSDT,
+		AmountOwed: big.NewInt(1000),
+		AmountPaid: amountPaid,
+		Metadata: map[string]any{
+			yuridInvoiceUUIDMetaId: id,
+			yuridInvoiceFiatMetaID: yuri.USD.Of(5),
+		},
+	}
+}
+
+// newEventsClient connects an SSE client to a stream and waits for the
+// connection to be established (headers flushed after subscribing).
+func newEventsClient(t *testing.T, srvURL, stream string) (*http.Response, <-chan sseFrame) {
+	t.Helper()
+
+	url := srvURL + "/events"
+	if stream != "" {
+		url += "?stream=" + stream
+	}
+
+	// Timeout as a safety net: the stream is only read until the frames
+	// the test expects have arrived.
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		t.Fatalf("connect to events stream: %+v", err)
+	}
+	t.Cleanup(func() { _ = resp.Body.Close() })
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("StatusCode = %d expected = 200", resp.StatusCode)
+	}
+
+	return resp, streamFrames(t, resp)
+}
+
+func TestEvents_StreamsInvoiceUpdates(t *testing.T) {
+	api := newTestAPI(t)
+
+	srv := httptest.NewServer(api.Handler())
+	// Registered before the client-body cleanups so those run first:
+	// Close() blocks until outstanding requests finish, and the SSE
+	// connection stays open until the client closes it.
+	t.Cleanup(srv.Close)
+
+	_, frames := newEventsClient(t, srv.URL, "")
+
+	inv := testInvoice(false)
+	api.events.PublishInvoice(inv)
+
+	got := nextFrame(t, frames)
+	if got.typ != "invoice" || got.id != "0" {
+		t.Fatalf("frame = %+v expected type=invoice id=0", got)
+	}
+
+	id := inv.Metadata[yuridInvoiceUUIDMetaId].(uuid.UUID).String()
+	want, err := json.Marshal(wrapInvoice(id, inv))
+	if err != nil {
+		t.Fatal(err)
+	}
+	jsonCompare(t, []byte(got.data), want)
+}
+
+func TestEvents_PaidStreamFilters(t *testing.T) {
+	api := newTestAPI(t)
+
+	srv := httptest.NewServer(api.Handler())
+	t.Cleanup(srv.Close)
+
+	_, updates := newEventsClient(t, srv.URL, "updates")
+	_, paid := newEventsClient(t, srv.URL, "paid")
+
+	unpaid := testInvoice(false)
+	paidInv := testInvoice(true)
+
+	api.events.PublishInvoice(unpaid)
+	api.events.PublishInvoice(paidInv)
+
+	// the paid stream only sees the paid invoice
+	got := nextFrame(t, paid)
+	if got.typ != "invoice" || got.id != "0" {
+		t.Fatalf("paid stream frame = %+v expected type=invoice id=0", got)
+	}
+	var data wrappedInvoice
+	if err := json.Unmarshal([]byte(got.data), &data); err != nil {
+		t.Fatal(err)
+	}
+	if data.Id != paidInv.Metadata[yuridInvoiceUUIDMetaId].(uuid.UUID).String() {
+		t.Fatalf("paid stream invoice id = %s, expected the paid invoice", data.Id)
+	}
+
+	// the updates stream sees both, in order
+	first := nextFrame(t, updates)
+	var firstData wrappedInvoice
+	if err := json.Unmarshal([]byte(first.data), &firstData); err != nil {
+		t.Fatal(err)
+	}
+	if first.id != "0" || firstData.Id != unpaid.Metadata[yuridInvoiceUUIDMetaId].(uuid.UUID).String() {
+		t.Fatalf("updates stream first frame = %+v expected the unpaid invoice", first)
+	}
+
+	second := nextFrame(t, updates)
+	var secondData wrappedInvoice
+	if err := json.Unmarshal([]byte(second.data), &secondData); err != nil {
+		t.Fatal(err)
+	}
+	if second.id != "1" || secondData.Id != paidInv.Metadata[yuridInvoiceUUIDMetaId].(uuid.UUID).String() {
+		t.Fatalf("updates stream second frame = %+v expected the paid invoice", second)
+	}
+}
+
+func TestEvents_ReplaysFromLastEventID(t *testing.T) {
+	api := newTestAPI(t)
+
+	// publish history before any client connects
+	inv1 := testInvoice(false)
+	inv2 := testInvoice(true)
+	inv3 := testInvoice(false)
+	api.events.PublishInvoice(inv1)
+	api.events.PublishInvoice(inv2)
+	api.events.PublishInvoice(inv3)
+
+	srv := httptest.NewServer(api.Handler())
+	t.Cleanup(srv.Close)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequest("GET", srv.URL+"/events?stream=updates", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Last-Event-ID", "1")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("connect to events stream: %+v", err)
+	}
+	t.Cleanup(func() { _ = resp.Body.Close() })
+
+	frames := streamFrames(t, resp)
+
+	// events with id >= 1 are replayed
+	first := nextFrame(t, frames)
+	if first.id != "1" {
+		t.Fatalf("first replayed frame id = %s expected = 1", first.id)
+	}
+	var firstData wrappedInvoice
+	if err := json.Unmarshal([]byte(first.data), &firstData); err != nil {
+		t.Fatal(err)
+	}
+	if firstData.Id != inv2.Metadata[yuridInvoiceUUIDMetaId].(uuid.UUID).String() {
+		t.Fatalf("first replayed frame = %+v expected invoice 2", first)
+	}
+
+	second := nextFrame(t, frames)
+	if second.id != "2" {
+		t.Fatalf("second replayed frame id = %s expected = 2", second.id)
+	}
+	var secondData wrappedInvoice
+	if err := json.Unmarshal([]byte(second.data), &secondData); err != nil {
+		t.Fatal(err)
+	}
+	if secondData.Id != inv3.Metadata[yuridInvoiceUUIDMetaId].(uuid.UUID).String() {
+		t.Fatalf("second replayed frame = %+v expected invoice 3", second)
 	}
 }

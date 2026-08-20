@@ -95,6 +95,7 @@ var supportedPricingProviders = map[string]func(*http.Client) yuri.PriceProvider
 	"ripio":             yuri.NewRipioPriceProvider,
 	"yadio":             yuri.NewYadioPriceProvider,
 	"null":              func(*http.Client) yuri.PriceProvider { return yuri.NewNullPriceProvider() },
+	"static":            func(*http.Client) yuri.PriceProvider { return yuri.NewStaticPriceProvider(1) },
 }
 
 type CryptoConfiguration struct {
@@ -137,7 +138,11 @@ func (s *pricingProviderSliceFlag) Set(v string) error {
 
 		if p == "ALL" {
 			for _, name := range pricingProviderNames() {
-				if name != "null" && !slices.Contains(*s, name) {
+				if name == "null" || name == "static" {
+					continue
+				}
+
+				if !slices.Contains(*s, name) {
 					*s = append(*s, name)
 				}
 			}
