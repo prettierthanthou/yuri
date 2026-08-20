@@ -18,7 +18,6 @@ import (
 )
 
 type API struct {
-	addr             string
 	storage          Database
 	instance         *yuri.Instance
 	mux              *http.ServeMux
@@ -26,9 +25,8 @@ type API struct {
 	apiToken         string
 }
 
-func NewAPI(addr string, database Database, instance *yuri.Instance, activeChainNames []string, apiToken string) *API {
+func NewAPI(database Database, instance *yuri.Instance, activeChainNames []string, apiToken string) *API {
 	api := &API{
-		addr:             addr,
 		storage:          database,
 		instance:         instance,
 		mux:              http.NewServeMux(),
@@ -44,23 +42,22 @@ func (a *API) Handler() http.Handler {
 	return a.mux
 }
 
-func (a *API) ListenAndServe() error {
-	srv := &http.Server{
-		Addr:              a.addr,
-		Handler:           a.mux,
-		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      10 * time.Second,
-		ReadHeaderTimeout: 5 * time.Second,
-	}
-
-	return srv.ListenAndServe()
-}
-
 func (a *API) routes() {
 	a.mux.HandleFunc("/sample", a.requireAuth(a.handleSample))
 	a.mux.HandleFunc("/active", a.requireAuth(a.handleActive))
 	a.mux.HandleFunc("/get", a.requireAuth(a.handleGet))
 	a.mux.HandleFunc("/new", a.requireAuth(a.handleNew))
+}
+
+// canonicalChain resolves name (case-insensitively) to the canonical name
+// of a registered chain.
+func (a *API) canonicalChain(name string) (yuri.Chain, bool) {
+	for _, active := range a.activeChainNames {
+		if strings.EqualFold(active, name) {
+			return yuri.Chain(active), true
+		}
+	}
+	return "", false
 }
 
 // requireAuth enforces the configured bearer token, if any.
@@ -127,14 +124,34 @@ func (a *API) wrapInvoice(id string, inv *yuri.Invoice) wrappedInvoice {
 	delete(cloned.Metadata, yuridInvoiceUUIDMetaId)
 	delete(cloned.Metadata, yuridInvoiceFiatMetaID)
 	delete(cloned.Metadata, yuridInvoiceExpireyMetaID)
-	wrapped := wrappedInvoice{
+
+	return wrappedInvoice{
 		Id:      id,
 		Paid:    inv.Paid(),
 		Fiat:    fiat,
 		Invoice: cloned,
 	}
+}
 
-	return wrapped
+// invoiceID extracts the yurid invoice UUID from the invoice metadata.
+func invoiceID(inv *yuri.Invoice) (string, error) {
+	raw, ok := inv.Metadata[yuridInvoiceUUIDMetaId]
+	if !ok {
+		return "", errors.New("invoice metadata is missing the yurid invoice UUID")
+	}
+
+	switch v := raw.(type) {
+	case uuid.UUID:
+		return v.String(), nil
+	case string:
+		id, err := uuid.Parse(v)
+		if err != nil {
+			return "", fmt.Errorf("invalid yurid invoice UUID %q: %w", v, err)
+		}
+		return id.String(), nil
+	default:
+		return "", fmt.Errorf("unexpected type %T for yurid invoice UUID", raw)
+	}
 }
 
 func (a *API) handleSample(w http.ResponseWriter, r *http.Request) {
@@ -165,20 +182,11 @@ func (a *API) handleActive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	foundChain := ""
-	for _, activeChain := range a.activeChainNames {
-		if strings.EqualFold(activeChain, chainStr) {
-			foundChain = activeChain
-			break
-		}
-	}
-
-	if foundChain == "" {
+	chain, ok := a.canonicalChain(chainStr)
+	if !ok {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("chain %s is not registered", chainStr), nil)
 		return
 	}
-
-	chain := yuri.Chain(foundChain)
 
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
@@ -191,19 +199,13 @@ func (a *API) handleActive(w http.ResponseWriter, r *http.Request) {
 
 	wrapped := make(map[string]wrappedInvoice, len(activeInvoices))
 	for _, inv := range activeInvoices {
-		rawId, ok := inv.Metadata[yuridInvoiceUUIDMetaId]
-		if !ok {
-			writeError(w, http.StatusInternalServerError, "failed to get invoice ID from metadata", nil)
-			return
-		}
-
-		id, err := uuid.Parse(rawId.(string))
+		id, err := invoiceID(&inv)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to cast internal invoice uuid from metadata to UUID", err)
+			writeError(w, http.StatusInternalServerError, "failed to get invoice ID from metadata", err)
 			return
 		}
 
-		wrapped[id.String()] = a.wrapInvoice(id.String(), &inv)
+		wrapped[id] = a.wrapInvoice(id, &inv)
 	}
 
 	writeJSON(w, http.StatusOK, wrapped)
@@ -219,28 +221,11 @@ type WrappedInvoiceCreate struct {
 	ExpiresAt int64 `json:"expires_at"`
 }
 
-// respondWithInvoice reads the invoice uuid from inv's metadata and
-// writes its wrapped form.
+// respondWithInvoice writes the wrapped form of a stored invoice.
 func (a *API) respondWithInvoice(w http.ResponseWriter, inv *yuri.Invoice) {
-	rawId, ok := inv.Metadata[yuridInvoiceUUIDMetaId]
-	if !ok {
-		writeError(w, http.StatusInternalServerError, "failed to get invoice ID from metadata", nil)
-		return
-	}
-
-	var id string
-	switch v := rawId.(type) {
-	case uuid.UUID:
-		id = v.String()
-	case string:
-		parsed, err := uuid.Parse(v)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to cast internal invoice uuid from metadata to UUID", err)
-			return
-		}
-		id = parsed.String()
-	default:
-		writeError(w, http.StatusInternalServerError, "failed to cast internal invoice uuid from metadata to UUID", nil)
+	id, err := invoiceID(inv)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get invoice ID from metadata", err)
 		return
 	}
 
@@ -259,19 +244,12 @@ func (a *API) handleNew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	registeredChain := false
-	for _, activeChain := range a.activeChainNames {
-		if strings.EqualFold(activeChain, string(req.Chain)) {
-			registeredChain = true
-			req.Chain = yuri.Chain(activeChain)
-			break
-		}
-	}
-
-	if !registeredChain {
+	chain, ok := a.canonicalChain(string(req.Chain))
+	if !ok {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("chain %s is not registered", req.Chain), nil)
 		return
 	}
+	req.Chain = chain
 
 	if req.AmountFiat.Minor <= 0 {
 		writeError(w, http.StatusBadRequest, "amount cannot be less than or equal to zero", nil)
@@ -283,9 +261,6 @@ func (a *API) handleNew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-	defer cancel()
-
 	if req.Metadata == nil {
 		req.Metadata = map[string]any{}
 	}
@@ -295,6 +270,9 @@ func (a *API) handleNew(w http.ResponseWriter, r *http.Request) {
 			delete(req.Metadata, key)
 		}
 	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
 
 	if req.Id != "" {
 		activeInvoices, err := a.storage.GetActiveInvoices(ctx, req.Chain)
@@ -317,6 +295,7 @@ func (a *API) handleNew(w http.ResponseWriter, r *http.Request) {
 	if req.ExpiresAt != 0 {
 		req.Metadata[yuridInvoiceExpireyMetaID] = time.UnixMilli(req.ExpiresAt)
 	}
+
 	inv, err := a.instance.NewInvoice(ctx, req.InvoiceCreate)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create invoice", err)

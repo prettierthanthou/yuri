@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -50,44 +51,50 @@ var supportedChainNames = []yuri.Chain{
 	yuri.Solana,
 }
 
-var supportedChains = map[yuri.Chain]func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider{
-	yuri.Bitcoin:   func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewBitcoin(rpc) },
-	yuri.Litecoin:  func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewLitecoin(rpc) },
-	yuri.Dogecoin:  func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewDogecoin(rpc) },
-	yuri.Ethereum:  func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewEthereum(rpc) },
-	yuri.BNB:       func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewBNB(rpc) },
-	yuri.Polygon:   func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewPolygon(rpc) },
-	yuri.Avalanche: func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewAvalanche(rpc) },
-	yuri.Arbitrum:  func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewArbitrum(rpc) },
-	yuri.Base:      func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewBase(rpc) },
-	yuri.Optimism:  func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewOptimism(rpc) },
-	yuri.Fantom:    func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewFantom(rpc) },
-	yuri.Monero:    func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return yuri.NewMonero(rpc) },
+// chainBuilder adapts a concrete provider constructor to one returning
+// the CryptoProvider interface.
+func chainBuilder[P yuri.CryptoProvider](new func(yuri.JsonRpcClientConfig) P) func(yuri.JsonRpcClientConfig) yuri.CryptoProvider {
+	return func(rpc yuri.JsonRpcClientConfig) yuri.CryptoProvider { return new(rpc) }
 }
 
-var supportedPricingProviders map[string]func(c *http.Client) yuri.PriceProvider = map[string]func(c *http.Client) yuri.PriceProvider{
-	"coingecko":         func(c *http.Client) yuri.PriceProvider { return yuri.NewCoinGeckoPriceProvider(c) },
-	"btcturk":           func(c *http.Client) yuri.PriceProvider { return yuri.NewBtcTurkPriceProvider(c) },
-	"barebitcoin":       func(c *http.Client) yuri.PriceProvider { return yuri.NewBareBitcoinPriceProvider(c) },
-	"bitbank":           func(c *http.Client) yuri.PriceProvider { return yuri.NewBitbankPriceProvider(c) },
-	"bitcoinkenya":      func(c *http.Client) yuri.PriceProvider { return yuri.NewBitcoinKenyaPriceProvider(c) },
-	"bitflyer":          func(c *http.Client) yuri.PriceProvider { return yuri.NewBitflyerPriceProvider(c) },
-	"bitmynt":           func(c *http.Client) yuri.PriceProvider { return yuri.NewBitmyntPriceProvider(c) },
-	"bitnob":            func(c *http.Client) yuri.PriceProvider { return yuri.NewBitnobPriceProvider(c) },
-	"bitpay":            func(c *http.Client) yuri.PriceProvider { return yuri.NewBitpayPriceProvider(c) },
-	"buda":              func(c *http.Client) yuri.PriceProvider { return yuri.NewBudaPriceProvider(c) },
-	"bylls":             func(c *http.Client) yuri.PriceProvider { return yuri.NewByllsPriceProvider(c) },
-	"coindcx":           func(c *http.Client) yuri.PriceProvider { return yuri.NewCoinDCXPriceProvider(c) },
-	"coinmate":          func(c *http.Client) yuri.PriceProvider { return yuri.NewCoinmatePriceProvider(c) },
-	"cryptomarket":      func(c *http.Client) yuri.PriceProvider { return yuri.NewCryptoMarketPriceProvider(c) },
-	"desiboard":         func(c *http.Client) yuri.PriceProvider { return yuri.NewDesiboardPriceProvider(c) },
-	"freecurrencyrates": func(c *http.Client) yuri.PriceProvider { return yuri.NewFreeCurrencyRatesPriceProvider(c) },
-	"hitbtc":            func(c *http.Client) yuri.PriceProvider { return yuri.NewHitBTCPriceProvider(c) },
-	"kraken":            func(c *http.Client) yuri.PriceProvider { return yuri.NewKrakenPriceProvider(c) },
-	"luno":              func(c *http.Client) yuri.PriceProvider { return yuri.NewLunoPriceProvider(c) },
-	"ripio":             func(c *http.Client) yuri.PriceProvider { return yuri.NewRipioPriceProvider(c) },
-	"yadio":             func(c *http.Client) yuri.PriceProvider { return yuri.NewYadioPriceProvider(c) },
-	"null":              func(_ *http.Client) yuri.PriceProvider { return yuri.NewNullPriceProvider() },
+var supportedChains = map[yuri.Chain]func(yuri.JsonRpcClientConfig) yuri.CryptoProvider{
+	yuri.Bitcoin:   chainBuilder(yuri.NewBitcoin),
+	yuri.Litecoin:  chainBuilder(yuri.NewLitecoin),
+	yuri.Dogecoin:  chainBuilder(yuri.NewDogecoin),
+	yuri.Ethereum:  chainBuilder(yuri.NewEthereum),
+	yuri.BNB:       chainBuilder(yuri.NewBNB),
+	yuri.Polygon:   chainBuilder(yuri.NewPolygon),
+	yuri.Avalanche: chainBuilder(yuri.NewAvalanche),
+	yuri.Arbitrum:  chainBuilder(yuri.NewArbitrum),
+	yuri.Base:      chainBuilder(yuri.NewBase),
+	yuri.Optimism:  chainBuilder(yuri.NewOptimism),
+	yuri.Fantom:    chainBuilder(yuri.NewFantom),
+	yuri.Monero:    chainBuilder(yuri.NewMonero),
+}
+
+var supportedPricingProviders = map[string]func(*http.Client) yuri.PriceProvider{
+	"coingecko":         yuri.NewCoinGeckoPriceProvider,
+	"btcturk":           yuri.NewBtcTurkPriceProvider,
+	"barebitcoin":       yuri.NewBareBitcoinPriceProvider,
+	"bitbank":           yuri.NewBitbankPriceProvider,
+	"bitcoinkenya":      yuri.NewBitcoinKenyaPriceProvider,
+	"bitflyer":          yuri.NewBitflyerPriceProvider,
+	"bitmynt":           yuri.NewBitmyntPriceProvider,
+	"bitnob":            yuri.NewBitnobPriceProvider,
+	"bitpay":            yuri.NewBitpayPriceProvider,
+	"buda":              yuri.NewBudaPriceProvider,
+	"bylls":             yuri.NewByllsPriceProvider,
+	"coindcx":           yuri.NewCoinDCXPriceProvider,
+	"coinmate":          yuri.NewCoinmatePriceProvider,
+	"cryptomarket":      yuri.NewCryptoMarketPriceProvider,
+	"desiboard":         yuri.NewDesiboardPriceProvider,
+	"freecurrencyrates": yuri.NewFreeCurrencyRatesPriceProvider,
+	"hitbtc":            yuri.NewHitBTCPriceProvider,
+	"kraken":            yuri.NewKrakenPriceProvider,
+	"luno":              yuri.NewLunoPriceProvider,
+	"ripio":             yuri.NewRipioPriceProvider,
+	"yadio":             yuri.NewYadioPriceProvider,
+	"null":              func(*http.Client) yuri.PriceProvider { return yuri.NewNullPriceProvider() },
 }
 
 type CryptoConfiguration struct {
@@ -106,61 +113,45 @@ type Configuration struct {
 	APIToken         string
 }
 
+func pricingProviderNames() []string {
+	names := make([]string, 0, len(supportedPricingProviders))
+	for name := range supportedPricingProviders {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
 type pricingProviderSliceFlag []string
 
 func (s *pricingProviderSliceFlag) String() string {
-	names := make([]string, 0, len(supportedPricingProviders))
-	for k := range supportedPricingProviders {
-		names = append(names, k)
-	}
-	sort.Strings(names)
-	return strings.Join(names, ", ")
+	return strings.Join(pricingProviderNames(), ", ")
 }
 
 func (s *pricingProviderSliceFlag) Set(v string) error {
-	parts := strings.SplitSeq(v, ",")
-
-	for p := range parts {
+	for _, p := range strings.Split(v, ",") {
 		p = strings.TrimSpace(p)
 		if p == "" {
 			continue
 		}
 
 		if p == "ALL" {
-			slog.Debug("found 'ALL' price provider, registering all...")
-			built := make([]string, 0, len(supportedPricingProviders))
-			for k := range supportedPricingProviders {
-				if k == "null" || s.Contains(k) {
-					continue
+			for _, name := range pricingProviderNames() {
+				if name != "null" && !slices.Contains(*s, name) {
+					*s = append(*s, name)
 				}
-
-				built = append(built, k)
 			}
-
-			slog.Debug("added price providers...", "built", built)
-
-			*s = append(*s, built...)
-			return nil
+			continue
 		}
 
 		if _, ok := supportedPricingProviders[p]; !ok {
-			return fmt.Errorf("unknown pricing provider: %s", p)
+			return fmt.Errorf("unknown pricing provider: %q", p)
 		}
 
 		*s = append(*s, p)
 	}
 
 	return nil
-}
-
-func (s pricingProviderSliceFlag) Contains(v string) bool {
-	for _, p := range s {
-		if p == v {
-			return true
-		}
-	}
-
-	return false
 }
 
 func ParseConfig() (Configuration, error) {
@@ -202,83 +193,71 @@ func ParseConfig() (Configuration, error) {
 		}
 	}
 
-	supportedProviders := make([]string, 0, len(supportedPricingProviders))
-	for priceProviderKey := range supportedPricingProviders {
-		supportedProviders = append(supportedProviders, priceProviderKey)
-	}
-
-	var pricingProviderNames pricingProviderSliceFlag
-	fs.Var(&pricingProviderNames, "price", fmt.Sprintf("List of pricing providers (or ALL) either as new flags or comma seperated: %s", strings.Join(supportedProviders, ", ")))
+	var pricingProviderNamesFlag pricingProviderSliceFlag
+	fs.Var(
+		&pricingProviderNamesFlag,
+		"price",
+		fmt.Sprintf("List of pricing providers (or ALL), either as repeated flags or comma separated: %s", strings.Join(pricingProviderNames(), ", ")),
+	)
 
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			fmt.Printf("Example usage:\n%s", exampleUsage)
-			return Configuration{}, err
 		}
 		return Configuration{}, err
 	}
 
-	// post process
 	client, err := defaultHTTPClient(globalProxy)
 	if err != nil {
 		return Configuration{}, fmt.Errorf("global proxy: %w", err)
 	}
 
-	out := Configuration{
-		Chains:           make([]yuri.CryptoProvider, 0, len(supportedChains)),
-		PricingProviders: make([]yuri.PriceProvider, 0, len(supportedPricingProviders)),
+	chains, err := buildChainProviders(chainConfigs, client)
+	if err != nil {
+		return Configuration{}, err
 	}
 
-	hasSeenAtleast1ValidChainConf := false
+	priceProviders, err := buildPricingProviders(client, pricingProviderNamesFlag)
+	if err != nil {
+		return Configuration{}, err
+	}
+
+	dbType := DatabaseType(strings.ToLower(databaseType))
+	switch dbType {
+	case DatabaseTypeSqlite, DatabaseTypePostgres, DatabaseTypeMysql:
+	default:
+		return Configuration{}, fmt.Errorf("database type '%s' is not valid (sqlite|mysql|postgresql)", databaseType)
+	}
+
+	return Configuration{
+		Addr:             addr,
+		APIToken:         apiToken,
+		Chains:           chains,
+		PricingProviders: priceProviders,
+		DatabaseConfig:   DatabaseConfig{Type: dbType, DSN: databaseDsn},
+	}, nil
+}
+
+// buildChainProviders validates each enabled chain config and constructs
+// its provider. TON and Solana additionally require a wallet output
+// directory to persist freshly generated keypairs.
+func buildChainProviders(chainConfigs map[yuri.Chain]*CryptoConfiguration, client *http.Client) ([]yuri.CryptoProvider, error) {
+	providers := make([]yuri.CryptoProvider, 0, len(chainConfigs))
+
 	for chain, cfg := range chainConfigs {
 		if !cfg.Enabled() {
 			continue
 		}
 
 		if err := cfg.Validate(chain); err != nil {
-			return Configuration{}, err
-		}
-
-		rpc, err := cfg.RPCConfig(chain, client)
-		if err != nil {
-			return Configuration{}, err
-		}
-
-		hasSeenAtleast1ValidChainConf = true
-
-		getHooks := func() (yuri.ProviderHooks, error) {
-			if cfg.walletOutDir == "" {
-				return yuri.ProviderHooks{}, fmt.Errorf("expected %s to have a wallet-out-dir but instead recieved '%s'", chain, cfg.walletOutDir)
-			}
-
-			return yuri.ProviderHooks{
-				OnNewAddress: func(ctx context.Context, pk1 crypto.PublicKey, pk2 crypto.PrivateKey) error {
-					pk3, ok := pk1.(ed25519.PublicKey)
-					if !ok {
-						return fmt.Errorf("failed to cast PublicKey to ed25519 PublicKey: got %T", pk1)
-					}
-					pk4, ok := pk2.(ed25519.PrivateKey)
-					if !ok {
-						return fmt.Errorf("failed to cast PrivateKey to ed25519 PrivateKey: got %T", pk2)
-					}
-
-					return os.WriteFile(
-						path.Join(
-							cfg.walletOutDir,
-							base64.RawStdEncoding.EncodeToString(pk3),
-						),
-						pk4,
-						0600,
-					)
-				},
-			}, nil
+			return nil, err
 		}
 
 		switch chain {
 		case yuri.Ton:
-			hooks, err := getHooks()
+			hooks, err := walletHooks(chain, cfg.walletOutDir)
 			if err != nil {
-				return Configuration{}, err
+				return nil, err
 			}
 
 			host := cfg.Host
@@ -286,65 +265,92 @@ func ParseConfig() (Configuration, error) {
 				host = yuri.TonMainnetPublic
 			}
 
-			tonProvider, err := yuri.NewTonWithConfigUrl(yuri.TonOptions{Hooks: hooks}, host)
+			ton, err := yuri.NewTonWithConfigUrl(yuri.TonOptions{Hooks: hooks}, host)
 			if err != nil {
-				return Configuration{}, fmt.Errorf("failed to create TonProvider: err %+v", err)
+				return nil, fmt.Errorf("failed to create TON provider: %w", err)
 			}
 
-			out.Chains = append(out.Chains, tonProvider)
+			providers = append(providers, ton)
 		case yuri.Solana:
-			hooks, err := getHooks()
+			hooks, err := walletHooks(chain, cfg.walletOutDir)
 			if err != nil {
-				return Configuration{}, err
+				return nil, err
 			}
 
-			out.Chains = append(out.Chains, yuri.NewSolana(yuri.SolanaOptions{
+			rpc, err := cfg.RPCConfig(chain, client)
+			if err != nil {
+				return nil, err
+			}
+
+			providers = append(providers, yuri.NewSolana(yuri.SolanaOptions{
 				Hooks: hooks,
 				Rpc:   rpc,
 			}))
 		default:
-			out.Chains = append(out.Chains, supportedChains[chain](rpc))
+			rpc, err := cfg.RPCConfig(chain, client)
+			if err != nil {
+				return nil, err
+			}
+
+			providers = append(providers, supportedChains[chain](rpc))
 		}
 	}
 
-	if !hasSeenAtleast1ValidChainConf {
-		return Configuration{}, errors.New("atleast 1 CryptoProvider must be specified")
+	if len(providers) == 0 {
+		return nil, errors.New("at least 1 CryptoProvider must be specified")
 	}
 
-	if len(pricingProviderNames) == 0 {
-		return Configuration{}, errors.New("atleast 1 pricing provider must be specified")
+	return providers, nil
+}
+
+func buildPricingProviders(client *http.Client, names []string) ([]yuri.PriceProvider, error) {
+	if len(names) == 0 {
+		return nil, errors.New("at least 1 pricing provider must be specified")
 	}
 
-	for _, priceProviderName := range pricingProviderNames {
-		newFunc, ok := supportedPricingProviders[priceProviderName]
+	providers := make([]yuri.PriceProvider, 0, len(names))
+	for _, name := range names {
+		build, ok := supportedPricingProviders[name]
 		if !ok {
-			// NOTE: this is redudant as we can never get here but i'd rather.. it just exist
-			slog.Error("unsupported pricing provider before runtime", "name", priceProviderName)
-			return Configuration{}, fmt.Errorf("REALLY BAD STATE!! unsupported pricing provider '%s', please use -help", priceProviderName)
+			return nil, fmt.Errorf("unsupported pricing provider: %q", name)
 		}
 
-		if priceProviderName == "null" {
-			slog.Warn("null pricing provider is enabled, you most likely do not want this!")
+		if name == "null" {
+			slog.Warn("null pricing provider enabled; prices will always be zero")
 		}
 
-		provider := newFunc(client)
-		out.PricingProviders = append(out.PricingProviders, provider)
+		providers = append(providers, build(client))
 	}
 
-	out.Addr = addr
-	out.APIToken = apiToken
+	return providers, nil
+}
 
-	dbTypLower := strings.ToLower(databaseType)
-	if dbTypLower != string(DatabaseTypeMysql) && dbTypLower != string(DatabaseTypePostgres) && dbTypLower != string(DatabaseTypeSqlite) {
-		return Configuration{}, fmt.Errorf("database type '%s' is not valid", dbTypLower)
+// walletHooks persists freshly generated keypairs for chains that need a
+// wallet output directory (TON, Solana).
+func walletHooks(chain yuri.Chain, walletOutDir string) (yuri.ProviderHooks, error) {
+	if walletOutDir == "" {
+		return yuri.ProviderHooks{}, fmt.Errorf("%s: wallet-dir is required", chain)
 	}
 
-	out.DatabaseConfig = DatabaseConfig{
-		Type: DatabaseType(dbTypLower),
-		DSN:  databaseDsn,
-	}
+	return yuri.ProviderHooks{
+		OnNewAddress: func(_ context.Context, public crypto.PublicKey, private crypto.PrivateKey) error {
+			edPub, ok := public.(ed25519.PublicKey)
+			if !ok {
+				return fmt.Errorf("unexpected public key type %T", public)
+			}
 
-	return out, nil
+			edPriv, ok := private.(ed25519.PrivateKey)
+			if !ok {
+				return fmt.Errorf("unexpected private key type %T", private)
+			}
+
+			return os.WriteFile(
+				path.Join(walletOutDir, base64.RawStdEncoding.EncodeToString(edPub)),
+				edPriv,
+				0600,
+			)
+		},
+	}, nil
 }
 
 func (c CryptoConfiguration) Enabled() bool {

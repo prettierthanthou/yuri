@@ -2,48 +2,63 @@ package yurid
 
 import (
 	"bytes"
-	"codeberg.org/lewdest/yuri"
 	"context"
-	_ "database/sql"
 	"encoding/json"
 	"fmt"
-	_ "github.com/go-sql-driver/mysql"
-	"github.com/google/uuid"
 	"io"
-	"log"
-	_ "modernc.org/sqlite"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"testing"
 	"time"
+
+	"codeberg.org/lewdest/yuri"
+	"github.com/google/uuid"
+	_ "modernc.org/sqlite"
 )
 
-const yuridTestAddr = ":6761"
 const yuridTestUrl = "http://localhost:6761"
 
-func jsonCompare(t *testing.T, a, b []byte) bool {
+func jsonCompare(t *testing.T, got, want []byte) {
 	t.Helper()
 
-	var got, want any
-
-	if err := json.Unmarshal(a, &got); err != nil {
-		t.Fatal(err)
+	var g, w any
+	if err := json.Unmarshal(got, &g); err != nil {
+		t.Fatalf("unmarshal got: %v", err)
 	}
-
-	if err := json.Unmarshal(b, &want); err != nil {
-		t.Fatal(err)
+	if err := json.Unmarshal(want, &w); err != nil {
+		t.Fatalf("unmarshal want: %v", err)
 	}
-
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("got=%#v\nwant=%#v", got, want)
-		return false
+	if !reflect.DeepEqual(g, w) {
+		t.Fatalf("got=%#v\nwant=%#v", g, w)
 	}
-
-	return true
 }
 
-func TestSample(t *testing.T) {
+// fakeChain always succeeds at creating addresses, unlike real providers.
+type fakeChain struct{}
+
+func (fakeChain) Chain() yuri.Chain { return yuri.Ethereum }
+
+func (fakeChain) CreateAddress(context.Context) (string, error) {
+	return uuid.NewString(), nil
+}
+
+func (fakeChain) Decimals() int64 { return 8 }
+
+func (fakeChain) Poll(context.Context, []yuri.Invoice) ([]yuri.Invoice, error) {
+	return nil, nil
+}
+
+func (fakeChain) SupportsNFTs() bool { return false }
+
+func newTestAPI(t *testing.T) *API {
+	t.Helper()
+	return newTestAPIWith(t, fakeChain{}, "")
+}
+
+func newTestAPIWith(t *testing.T, chain yuri.CryptoProvider, token string) *API {
+	t.Helper()
+
 	db, err := NewDatabase(DatabaseConfig{Type: DatabaseTypeSqlite, DSN: ":memory:"})
 	if err != nil {
 		t.Fatalf("database = %+v", err)
@@ -51,7 +66,7 @@ func TestSample(t *testing.T) {
 
 	instance, err := yuri.New(yuri.Options{
 		Pricing:         []yuri.PriceProvider{yuri.NewStaticPriceProvider(1)},
-		Chains:          []yuri.CryptoProvider{yuri.NewEthereum(yuri.JsonRpcClientConfig{})},
+		Chains:          []yuri.CryptoProvider{chain},
 		PriceAggregator: yuri.MedianPriceAggregator{},
 		Storage:         db,
 	})
@@ -59,14 +74,18 @@ func TestSample(t *testing.T) {
 		t.Fatalf("instance = %+v", err)
 	}
 
-	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)}, "")
+	return NewAPI(db, instance, []string{string(yuri.Ethereum)}, token)
+}
+
+func TestSample(t *testing.T) {
+	api := newTestAPI(t)
+
 	req := httptest.NewRequest("GET", yuridTestUrl+"/sample", nil)
 	w := httptest.NewRecorder()
 
 	api.handleSample(w, req)
 
-	resp := w.Result()
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(w.Result().Body)
 	if err != nil {
 		t.Fatalf("readall = %+v", err)
 	}
@@ -76,23 +95,8 @@ func TestSample(t *testing.T) {
 }
 
 func TestGet_RequiresGetMethod(t *testing.T) {
-	db, err := NewDatabase(DatabaseConfig{Type: DatabaseTypeSqlite, DSN: ":memory:"})
-	if err != nil {
-		t.Fatalf("database = %+v", err)
-	}
+	api := newTestAPI(t)
 
-	instance, err := yuri.New(yuri.Options{
-		Pricing:         []yuri.PriceProvider{yuri.NewStaticPriceProvider(1)},
-		Chains:          []yuri.CryptoProvider{yuri.NewEthereum(yuri.JsonRpcClientConfig{})},
-		PriceAggregator: yuri.MedianPriceAggregator{},
-		Storage:         db,
-	})
-	if err != nil {
-		t.Fatalf("instance = %+v", err)
-	}
-
-	log.SetOutput(io.Discard)
-	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)}, "")
 	req := httptest.NewRequest("POST", yuridTestUrl+"/get", nil)
 	w := httptest.NewRecorder()
 
@@ -103,23 +107,8 @@ func TestGet_RequiresGetMethod(t *testing.T) {
 }
 
 func TestGet_MissingId(t *testing.T) {
-	db, err := NewDatabase(DatabaseConfig{Type: DatabaseTypeSqlite, DSN: ":memory:"})
-	if err != nil {
-		t.Fatalf("database = %+v", err)
-	}
+	api := newTestAPI(t)
 
-	instance, err := yuri.New(yuri.Options{
-		Pricing:         []yuri.PriceProvider{yuri.NewStaticPriceProvider(1)},
-		Chains:          []yuri.CryptoProvider{yuri.NewEthereum(yuri.JsonRpcClientConfig{})},
-		PriceAggregator: yuri.MedianPriceAggregator{},
-		Storage:         db,
-	})
-	if err != nil {
-		t.Fatalf("instance = %+v", err)
-	}
-
-	log.SetOutput(io.Discard)
-	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)}, "")
 	req := httptest.NewRequest("GET", yuridTestUrl+"/get", nil)
 	w := httptest.NewRecorder()
 
@@ -140,27 +129,13 @@ func TestGet_MissingId(t *testing.T) {
 }
 
 func TestGet_NoExistingRecord(t *testing.T) {
-	db, err := NewDatabase(DatabaseConfig{Type: DatabaseTypeSqlite, DSN: ":memory:"})
-	if err != nil {
-		t.Fatalf("database = %+v", err)
-	}
-
-	instance, err := yuri.New(yuri.Options{
-		Pricing:         []yuri.PriceProvider{yuri.NewStaticPriceProvider(1)},
-		Chains:          []yuri.CryptoProvider{yuri.NewEthereum(yuri.JsonRpcClientConfig{})},
-		PriceAggregator: yuri.MedianPriceAggregator{},
-		Storage:         db,
-	})
-	if err != nil {
-		t.Fatalf("instance = %+v", err)
-	}
+	api := newTestAPI(t)
 
 	id, err := uuid.NewV7()
 	if err != nil {
 		t.Fatalf("failed to create v7 uuid for testing: %+v", err)
 	}
 
-	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)}, "")
 	req := httptest.NewRequest("GET", fmt.Sprintf(yuridTestUrl+"/get?id=%s", id.String()), nil)
 	w := httptest.NewRecorder()
 
@@ -169,8 +144,7 @@ func TestGet_NoExistingRecord(t *testing.T) {
 		t.Fatalf("StatusCode = %d expected = 404", w.Result().StatusCode)
 	}
 
-	resp := w.Result()
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(w.Result().Body)
 	if err != nil {
 		t.Fatalf("readall = %+v", err)
 	}
@@ -180,22 +154,8 @@ func TestGet_NoExistingRecord(t *testing.T) {
 }
 
 func TestNew_InvalidMethod(t *testing.T) {
-	db, err := NewDatabase(DatabaseConfig{Type: DatabaseTypeSqlite, DSN: ":memory:"})
-	if err != nil {
-		t.Fatalf("database = %+v", err)
-	}
+	api := newTestAPI(t)
 
-	instance, err := yuri.New(yuri.Options{
-		Pricing:         []yuri.PriceProvider{yuri.NewStaticPriceProvider(1)},
-		Chains:          []yuri.CryptoProvider{yuri.NewEthereum(yuri.JsonRpcClientConfig{})},
-		PriceAggregator: yuri.MedianPriceAggregator{},
-		Storage:         db,
-	})
-	if err != nil {
-		t.Fatalf("instance = %+v", err)
-	}
-
-	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)}, "")
 	req := httptest.NewRequest("GET", yuridTestUrl+"/new", nil)
 	w := httptest.NewRecorder()
 
@@ -206,22 +166,8 @@ func TestNew_InvalidMethod(t *testing.T) {
 }
 
 func TestNew_InvalidJsonBody(t *testing.T) {
-	db, err := NewDatabase(DatabaseConfig{Type: DatabaseTypeSqlite, DSN: ":memory:"})
-	if err != nil {
-		t.Fatalf("database = %+v", err)
-	}
+	api := newTestAPI(t)
 
-	instance, err := yuri.New(yuri.Options{
-		Pricing:         []yuri.PriceProvider{yuri.NewStaticPriceProvider(1)},
-		Chains:          []yuri.CryptoProvider{yuri.NewEthereum(yuri.JsonRpcClientConfig{})},
-		PriceAggregator: yuri.MedianPriceAggregator{},
-		Storage:         db,
-	})
-	if err != nil {
-		t.Fatalf("instance = %+v", err)
-	}
-
-	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)}, "")
 	body, _ := json.Marshal(map[string]any{"blahhh": "hahaha"})
 	req := httptest.NewRequest("POST", yuridTestUrl+"/new", bytes.NewReader(body))
 	w := httptest.NewRecorder()
@@ -230,27 +176,13 @@ func TestNew_InvalidJsonBody(t *testing.T) {
 
 	resp := w.Result()
 	if resp.StatusCode != 400 {
-		t.Fatalf("StatusCode = %d expected = 400", w.Result().StatusCode)
+		t.Fatalf("StatusCode = %d expected = 400", resp.StatusCode)
 	}
 }
 
 func TestNew_InvalidBody(t *testing.T) {
-	db, err := NewDatabase(DatabaseConfig{Type: DatabaseTypeSqlite, DSN: ":memory:"})
-	if err != nil {
-		t.Fatalf("database = %+v", err)
-	}
+	api := newTestAPI(t)
 
-	instance, err := yuri.New(yuri.Options{
-		Pricing:         []yuri.PriceProvider{yuri.NewStaticPriceProvider(1)},
-		Chains:          []yuri.CryptoProvider{yuri.NewEthereum(yuri.JsonRpcClientConfig{})},
-		PriceAggregator: yuri.MedianPriceAggregator{},
-		Storage:         db,
-	})
-	if err != nil {
-		t.Fatalf("instance = %+v", err)
-	}
-
-	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)}, "")
 	req := httptest.NewRequest("POST", yuridTestUrl+"/new", bytes.NewReader([]byte("waqfvwae")))
 	w := httptest.NewRecorder()
 
@@ -258,27 +190,13 @@ func TestNew_InvalidBody(t *testing.T) {
 
 	resp := w.Result()
 	if resp.StatusCode != 400 {
-		t.Fatalf("StatusCode = %d expected = 400", w.Result().StatusCode)
+		t.Fatalf("StatusCode = %d expected = 400", resp.StatusCode)
 	}
 }
 
 func TestNew_InvalidFiatAmount(t *testing.T) {
-	db, err := NewDatabase(DatabaseConfig{Type: DatabaseTypeSqlite, DSN: ":memory:"})
-	if err != nil {
-		t.Fatalf("database = %+v", err)
-	}
+	api := newTestAPI(t)
 
-	instance, err := yuri.New(yuri.Options{
-		Pricing:         []yuri.PriceProvider{yuri.NewStaticPriceProvider(1)},
-		Chains:          []yuri.CryptoProvider{yuri.NewEthereum(yuri.JsonRpcClientConfig{})},
-		PriceAggregator: yuri.MedianPriceAggregator{},
-		Storage:         db,
-	})
-	if err != nil {
-		t.Fatalf("instance = %+v", err)
-	}
-
-	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)}, "")
 	body, _ := json.Marshal(WrappedInvoiceCreate{
 		InvoiceCreate: yuri.InvoiceCreate{
 			Chain:      yuri.Ethereum,
@@ -295,27 +213,13 @@ func TestNew_InvalidFiatAmount(t *testing.T) {
 
 	resp := w.Result()
 	if resp.StatusCode != 400 {
-		t.Fatalf("StatusCode = %d expected = 400", w.Result().StatusCode)
+		t.Fatalf("StatusCode = %d expected = 400", resp.StatusCode)
 	}
 }
 
 func TestNew_InvalidFiatAmountNegative(t *testing.T) {
-	db, err := NewDatabase(DatabaseConfig{Type: DatabaseTypeSqlite, DSN: ":memory:"})
-	if err != nil {
-		t.Fatalf("database = %+v", err)
-	}
+	api := newTestAPI(t)
 
-	instance, err := yuri.New(yuri.Options{
-		Pricing:         []yuri.PriceProvider{yuri.NewStaticPriceProvider(1)},
-		Chains:          []yuri.CryptoProvider{yuri.NewEthereum(yuri.JsonRpcClientConfig{})},
-		PriceAggregator: yuri.MedianPriceAggregator{},
-		Storage:         db,
-	})
-	if err != nil {
-		t.Fatalf("instance = %+v", err)
-	}
-
-	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)}, "")
 	body, _ := json.Marshal(WrappedInvoiceCreate{
 		InvoiceCreate: yuri.InvoiceCreate{
 			Chain:      yuri.Ethereum,
@@ -332,27 +236,13 @@ func TestNew_InvalidFiatAmountNegative(t *testing.T) {
 
 	resp := w.Result()
 	if resp.StatusCode != 400 {
-		t.Fatalf("StatusCode = %d expected = 400", w.Result().StatusCode)
+		t.Fatalf("StatusCode = %d expected = 400", resp.StatusCode)
 	}
 }
 
 func TestNew_NoMetadataRegression(t *testing.T) {
-	db, err := NewDatabase(DatabaseConfig{Type: DatabaseTypeSqlite, DSN: ":memory:"})
-	if err != nil {
-		t.Fatalf("database = %+v", err)
-	}
+	api := newTestAPIWith(t, yuri.NewEthereum(yuri.JsonRpcClientConfig{}), "")
 
-	instance, err := yuri.New(yuri.Options{
-		Pricing:         []yuri.PriceProvider{yuri.NewStaticPriceProvider(1)},
-		Chains:          []yuri.CryptoProvider{yuri.NewEthereum(yuri.JsonRpcClientConfig{})},
-		PriceAggregator: yuri.MedianPriceAggregator{},
-		Storage:         db,
-	})
-	if err != nil {
-		t.Fatalf("instance = %+v", err)
-	}
-
-	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)}, "")
 	body, _ := json.Marshal(WrappedInvoiceCreate{
 		InvoiceCreate: yuri.InvoiceCreate{
 			Chain:      yuri.Ethereum,
@@ -369,10 +259,9 @@ func TestNew_NoMetadataRegression(t *testing.T) {
 	resp := w.Result()
 
 	b, _ := io.ReadAll(resp.Body)
-	fmt.Printf("body = %s", b)
 	if resp.StatusCode != 500 {
 		// 500 is expected as this should fail to create the addr
-		t.Fatalf("StatusCode = %d expected = 500", w.Result().StatusCode)
+		t.Fatalf("StatusCode = %d expected = 500", resp.StatusCode)
 	}
 
 	const expectedBody = `{"detail":"failed to create address for invoice: err = Post \"\": unsupported protocol scheme \"\" invoice = {Chain:ethereum Token:{Symbol: Contract: Decimals:0} AmountFiat:{Currency:{Code:EUR Decimals:2} Minor:500} Metadata:map[yurid-fiat-hist:{Currency:{Code:EUR Decimals:2} Minor:500}]}","error":"failed to create invoice"}`
@@ -380,22 +269,8 @@ func TestNew_NoMetadataRegression(t *testing.T) {
 }
 
 func TestAuth_RejectsMissingToken(t *testing.T) {
-	db, err := NewDatabase(DatabaseConfig{Type: DatabaseTypeSqlite, DSN: ":memory:"})
-	if err != nil {
-		t.Fatalf("database = %+v", err)
-	}
+	api := newTestAPIWith(t, fakeChain{}, "sekrit")
 
-	instance, err := yuri.New(yuri.Options{
-		Pricing:         []yuri.PriceProvider{yuri.NewStaticPriceProvider(1)},
-		Chains:          []yuri.CryptoProvider{yuri.NewEthereum(yuri.JsonRpcClientConfig{})},
-		PriceAggregator: yuri.MedianPriceAggregator{},
-		Storage:         db,
-	})
-	if err != nil {
-		t.Fatalf("instance = %+v", err)
-	}
-
-	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)}, "sekrit")
 	req := httptest.NewRequest("GET", yuridTestUrl+"/sample", nil)
 	w := httptest.NewRecorder()
 
@@ -415,22 +290,8 @@ func TestAuth_RejectsMissingToken(t *testing.T) {
 }
 
 func TestAuth_AcceptsToken(t *testing.T) {
-	db, err := NewDatabase(DatabaseConfig{Type: DatabaseTypeSqlite, DSN: ":memory:"})
-	if err != nil {
-		t.Fatalf("database = %+v", err)
-	}
+	api := newTestAPIWith(t, fakeChain{}, "sekrit")
 
-	instance, err := yuri.New(yuri.Options{
-		Pricing:         []yuri.PriceProvider{yuri.NewStaticPriceProvider(1)},
-		Chains:          []yuri.CryptoProvider{yuri.NewEthereum(yuri.JsonRpcClientConfig{})},
-		PriceAggregator: yuri.MedianPriceAggregator{},
-		Storage:         db,
-	})
-	if err != nil {
-		t.Fatalf("instance = %+v", err)
-	}
-
-	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)}, "sekrit")
 	req := httptest.NewRequest("GET", yuridTestUrl+"/sample", nil)
 	req.Header.Set("Authorization", "Bearer sekrit")
 	w := httptest.NewRecorder()
@@ -442,22 +303,8 @@ func TestAuth_AcceptsToken(t *testing.T) {
 }
 
 func TestNew_RejectsPastExpiresAt(t *testing.T) {
-	db, err := NewDatabase(DatabaseConfig{Type: DatabaseTypeSqlite, DSN: ":memory:"})
-	if err != nil {
-		t.Fatalf("database = %+v", err)
-	}
+	api := newTestAPI(t)
 
-	instance, err := yuri.New(yuri.Options{
-		Pricing:         []yuri.PriceProvider{yuri.NewStaticPriceProvider(1)},
-		Chains:          []yuri.CryptoProvider{yuri.NewEthereum(yuri.JsonRpcClientConfig{})},
-		PriceAggregator: yuri.MedianPriceAggregator{},
-		Storage:         db,
-	})
-	if err != nil {
-		t.Fatalf("instance = %+v", err)
-	}
-
-	api := NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)}, "")
 	body, _ := json.Marshal(WrappedInvoiceCreate{
 		InvoiceCreate: yuri.InvoiceCreate{
 			Chain:      yuri.Ethereum,
@@ -483,55 +330,36 @@ func TestNew_RejectsPastExpiresAt(t *testing.T) {
 	jsonCompare(t, b, []byte(expectedBody))
 }
 
-// fakeChain always succeeds at creating addresses, unlike real providers.
-type fakeChain struct{}
-
-func (fakeChain) Chain() yuri.Chain { return yuri.Ethereum }
-
-func (fakeChain) CreateAddress(context.Context) (string, error) {
-	return uuid.NewString(), nil
-}
-
-func (fakeChain) Decimals() int64 { return 8 }
-
-func (fakeChain) Poll(context.Context, []yuri.Invoice) ([]yuri.Invoice, error) {
-	return nil, nil
-}
-
-func (fakeChain) SupportsNFTs() bool { return false }
-
-func newTestAPI(t *testing.T) *API {
+func postNew(t *testing.T, api *API, body []byte) (*http.Response, []byte) {
 	t.Helper()
 
-	db, err := NewDatabase(DatabaseConfig{Type: DatabaseTypeSqlite, DSN: ":memory:"})
-	if err != nil {
-		t.Fatalf("database = %+v", err)
-	}
-
-	instance, err := yuri.New(yuri.Options{
-		Pricing:         []yuri.PriceProvider{yuri.NewStaticPriceProvider(1)},
-		Chains:          []yuri.CryptoProvider{fakeChain{}},
-		PriceAggregator: yuri.MedianPriceAggregator{},
-		Storage:         db,
-	})
-	if err != nil {
-		t.Fatalf("instance = %+v", err)
-	}
-
-	return NewAPI(yuridTestAddr, db, instance, []string{string(yuri.Ethereum)}, "")
-}
-
-func TestNew_NullMetadataSucceeds(t *testing.T) {
-	api := newTestAPI(t)
-
-	body := []byte(`{"chain":"ethereum","amount_fiat":{"currency":{"code":"EUR","decimals":2},"minor":500},"metadata":null}`)
 	req := httptest.NewRequest("POST", yuridTestUrl+"/new", bytes.NewReader(body))
+	req.RemoteAddr = "192.0.2.4:1234"
 	w := httptest.NewRecorder()
 
 	api.handleNew(w, req)
 
 	resp := w.Result()
 	b, _ := io.ReadAll(resp.Body)
+	return resp, b
+}
+
+func getActive(t *testing.T, api *API, chain string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	req := httptest.NewRequest("GET", yuridTestUrl+"/active?chain="+chain, nil)
+	w := httptest.NewRecorder()
+
+	api.handleActive(w, req)
+	return w
+}
+
+func TestNew_NullMetadataSucceeds(t *testing.T) {
+	api := newTestAPI(t)
+
+	body := []byte(`{"chain":"ethereum","amount_fiat":{"currency":{"code":"EUR","decimals":2},"minor":500},"metadata":null}`)
+
+	resp, b := postNew(t, api, body)
 	if resp.StatusCode != 200 {
 		t.Fatalf("StatusCode = %d expected = 200 (body = %s)", resp.StatusCode, b)
 	}
@@ -558,27 +386,12 @@ func TestNew_NullMetadataSucceeds(t *testing.T) {
 	}
 }
 
-func getActive(t *testing.T, api *API, chain string) *httptest.ResponseRecorder {
-	t.Helper()
-
-	req := httptest.NewRequest("GET", yuridTestUrl+"/active?chain="+chain, nil)
-	w := httptest.NewRecorder()
-
-	api.handleActive(w, req)
-	return w
-}
-
 func TestActive_CanonicalizesChainCasing(t *testing.T) {
 	api := newTestAPI(t)
 
 	body := []byte(`{"chain":"ethereum","amount_fiat":{"currency":{"code":"EUR","decimals":2},"minor":500}}`)
-	req := httptest.NewRequest("POST", yuridTestUrl+"/new", bytes.NewReader(body))
-	w := httptest.NewRecorder()
 
-	api.handleNew(w, req)
-
-	resp := w.Result()
-	b, _ := io.ReadAll(resp.Body)
+	resp, b := postNew(t, api, body)
 	if resp.StatusCode != 200 {
 		t.Fatalf("StatusCode = %d expected = 200 (body = %s)", resp.StatusCode, b)
 	}
@@ -603,20 +416,6 @@ func TestActive_CanonicalizesChainCasing(t *testing.T) {
 	if _, ok := activeInvoices[created.Id]; !ok {
 		t.Fatalf("invoice %s was not found in active invoices for chain Ethereum", created.Id)
 	}
-}
-
-func postNew(t *testing.T, api *API, body []byte) (*http.Response, []byte) {
-	t.Helper()
-
-	req := httptest.NewRequest("POST", yuridTestUrl+"/new", bytes.NewReader(body))
-	req.RemoteAddr = "192.0.2.4:1234"
-	w := httptest.NewRecorder()
-
-	api.handleNew(w, req)
-
-	resp := w.Result()
-	b, _ := io.ReadAll(resp.Body)
-	return resp, b
 }
 
 func TestNew_IdempotencyKey(t *testing.T) {
@@ -706,13 +505,8 @@ func TestNew_CanonicalizesChainCasing(t *testing.T) {
 	api := newTestAPI(t)
 
 	body := []byte(`{"chain":"Ethereum","amount_fiat":{"currency":{"code":"EUR","decimals":2},"minor":500}}`)
-	req := httptest.NewRequest("POST", yuridTestUrl+"/new", bytes.NewReader(body))
-	w := httptest.NewRecorder()
 
-	api.handleNew(w, req)
-
-	resp := w.Result()
-	b, _ := io.ReadAll(resp.Body)
+	resp, b := postNew(t, api, body)
 	if resp.StatusCode != 200 {
 		t.Fatalf("StatusCode = %d expected = 200 (body = %s)", resp.StatusCode, b)
 	}

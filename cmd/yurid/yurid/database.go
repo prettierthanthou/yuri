@@ -48,12 +48,12 @@ type database struct {
 }
 
 func NewDatabase(conf DatabaseConfig) (*database, error) {
-	typ := string(conf.Type)
+	driver := string(conf.Type)
 	if conf.Type == DatabaseTypePostgres {
-		typ = "pgx"
+		driver = "pgx"
 	}
 
-	db, err := sql.Open(typ, conf.DSN)
+	db, err := sql.Open(driver, conf.DSN)
 	if err != nil {
 		return nil, err
 	}
@@ -163,13 +163,15 @@ func (d *database) ensureSchema() error {
 	return nil
 }
 
-func (d *database) GetInvoiceByID(ctx context.Context, id string) (*yuri.Invoice, error) {
-	row := d.db.QueryRowContext(ctx, d.rewrite(`
-		select chain, address, amount_owed, amount_paid, token, metadata, pending, expires_at
-		from "invoice"
-		where id = ?
-	`), id)
+// rowScanner exists as sql.Rows and sql.Row don't have an interface they implement,
+// and they aren't type compatiable with each other. ):
+type rowScanner interface {
+	Scan(dest ...any) error
+}
 
+// scanInvoice decodes one invoice row. When id is non-nil the row is
+// expected to start with the id column.
+func (d *database) scanInvoice(row rowScanner, id *string) (*yuri.Invoice, sql.NullTime, error) {
 	var (
 		chainStr  string
 		address   string
@@ -181,37 +183,33 @@ func (d *database) GetInvoiceByID(ctx context.Context, id string) (*yuri.Invoice
 		expiresAt sql.NullTime
 	)
 
-	if err := row.Scan(
-		&chainStr,
-		&address,
-		&owedStr,
-		&paidStr,
-		&tokenStr,
-		&metaStr,
-		&pending,
-		&expiresAt,
-	); err != nil {
-		return nil, err
+	dests := []any{&chainStr, &address, &owedStr, &paidStr, &tokenStr, &metaStr, &pending, &expiresAt}
+	if id != nil {
+		dests = append([]any{id}, dests...)
 	}
 
-	owed := new(big.Int)
-	if _, ok := owed.SetString(owedStr, 10); !ok {
-		return nil, fmt.Errorf("failed to SetString for owedStr")
+	if err := row.Scan(dests...); err != nil {
+		return nil, sql.NullTime{}, err
 	}
 
-	paid := new(big.Int)
-	if _, ok := paid.SetString(paidStr, 10); !ok {
-		return nil, fmt.Errorf("failed to SetString for paidStr")
+	owed, ok := new(big.Int).SetString(owedStr, 10)
+	if !ok {
+		return nil, sql.NullTime{}, fmt.Errorf("parsing amount owed %q", owedStr)
+	}
+
+	paid, ok := new(big.Int).SetString(paidStr, 10)
+	if !ok {
+		return nil, sql.NullTime{}, fmt.Errorf("parsing amount paid %q", paidStr)
 	}
 
 	var token yuri.Token
 	if err := json.Unmarshal([]byte(tokenStr), &token); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal token: %+v", err)
+		return nil, sql.NullTime{}, fmt.Errorf("decoding token: %w", err)
 	}
 
 	var metadata map[string]any
 	if err := json.Unmarshal([]byte(metaStr), &metadata); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal metadata: %+v", err)
+		return nil, sql.NullTime{}, fmt.Errorf("decoding metadata: %w", err)
 	}
 
 	return &yuri.Invoice{
@@ -222,7 +220,18 @@ func (d *database) GetInvoiceByID(ctx context.Context, id string) (*yuri.Invoice
 		Token:      token,
 		Pending:    pending,
 		Metadata:   metadata,
-	}, nil
+	}, expiresAt, nil
+}
+
+func (d *database) GetInvoiceByID(ctx context.Context, id string) (*yuri.Invoice, error) {
+	row := d.db.QueryRowContext(ctx, d.rewrite(`
+		select chain, address, amount_owed, amount_paid, token, metadata, pending, expires_at
+		from "invoice"
+		where id = ?
+	`), id)
+
+	inv, _, err := d.scanInvoice(row, nil)
+	return inv, err
 }
 
 // GetActiveInvoices implements [yuri.Storage].
@@ -233,39 +242,17 @@ func (d *database) GetActiveInvoices(ctx context.Context, chain yuri.Chain) ([]y
 		where chain = ?
 	`), chain)
 	if err != nil {
-		return nil, fmt.Errorf("querying active invoices failed: %+v", err)
+		return nil, fmt.Errorf("querying invoices for chain %s: %w", chain, err)
 	}
-	defer func() {
-		_ = rows.Close()
-	}()
+	defer rows.Close()
 
-	var collectedInvoices []yuri.Invoice
+	var invoices []yuri.Invoice
 	now := time.Now()
 
 	for rows.Next() {
-		var (
-			id            string
-			chainStr      string
-			address       string
-			amountOwedStr string
-			amountPaidStr string
-			tokenStr      string
-			metadataStr   string
-			pending       bool
-			expiresAt     sql.NullTime
-		)
-
-		if err := rows.Scan(
-			&id,
-			&chainStr,
-			&address,
-			&amountOwedStr,
-			&amountPaidStr,
-			&tokenStr,
-			&metadataStr,
-			&pending,
-			&expiresAt,
-		); err != nil {
+		var id string
+		inv, expiresAt, err := d.scanInvoice(rows, &id)
+		if err != nil {
 			return nil, err
 		}
 
@@ -274,46 +261,19 @@ func (d *database) GetActiveInvoices(ctx context.Context, chain yuri.Chain) ([]y
 			continue
 		}
 
-		amountOwed := new(big.Int)
-		if _, ok := amountOwed.SetString(amountOwedStr, 10); !ok {
-			return nil, fmt.Errorf("failed to parse amount owed")
-		}
-
-		amountPaid := new(big.Int)
-		if _, ok := amountPaid.SetString(amountPaidStr, 10); !ok {
-			return nil, fmt.Errorf("failed to parse amount paid")
-		}
-
-		if !pending && amountPaid.Cmp(amountOwed) >= 0 {
+		if !inv.Pending && inv.AmountPaid.Cmp(inv.AmountOwed) >= 0 {
 			continue
 		}
 
-		var token yuri.Token
-		if err := json.Unmarshal([]byte(tokenStr), &token); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal token: %+v", err)
+		if inv.Metadata == nil {
+			inv.Metadata = map[string]any{}
 		}
+		inv.Metadata[yuridInvoiceUUIDMetaId] = id
 
-		var metadata map[string]any
-		if err := json.Unmarshal([]byte(metadataStr), &metadata); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal metadata: %+v", err)
-		}
-		if metadata == nil {
-			metadata = make(map[string]any)
-		}
-
-		metadata[yuridInvoiceUUIDMetaId] = id
-		collectedInvoices = append(collectedInvoices, yuri.Invoice{
-			Chain:      yuri.Chain(chainStr),
-			Address:    address,
-			AmountOwed: amountOwed,
-			AmountPaid: amountPaid,
-			Token:      token,
-			Pending:    pending,
-			Metadata:   metadata,
-		})
+		invoices = append(invoices, *inv)
 	}
 
-	return collectedInvoices, rows.Err()
+	return invoices, rows.Err()
 }
 
 func (d *database) NewInvoiceWithExpirey(ctx context.Context, inv yuri.Invoice, expiresAt time.Time) (uuid.UUID, error) {
@@ -365,18 +325,18 @@ func (d *database) NewInvoiceWithExpirey(ctx context.Context, inv yuri.Invoice, 
 
 // NewInvoice implements [yuri.Storage].
 func (d *database) NewInvoice(ctx context.Context, inv yuri.Invoice) error {
-	_, ok := inv.Metadata[yuridInvoiceExpireyMetaID]
+	rawExpiry, ok := inv.Metadata[yuridInvoiceExpireyMetaID]
 	if !ok {
 		_, err := d.NewInvoiceWithExpirey(ctx, inv, time.Now().Add(30*time.Minute))
 		return err
 	}
 
-	castedExpirey, ok := inv.Metadata[yuridInvoiceExpireyMetaID].(time.Time)
+	expiresAt, ok := rawExpiry.(time.Time)
 	if !ok {
-		return errors.New("found yuridInvoiceExpireyMetaID but it was malformed?")
+		return errors.New("yurid-expirey metadata is malformed")
 	}
 
-	_, err := d.NewInvoiceWithExpirey(ctx, inv, castedExpirey)
+	_, err := d.NewInvoiceWithExpirey(ctx, inv, expiresAt)
 	return err
 }
 
@@ -412,7 +372,7 @@ func (d *database) UpdateInvoices(ctx context.Context, invoices []yuri.Invoice) 
 	for _, inv := range invoices {
 		invoiceId, ok := inv.Metadata[yuridInvoiceUUIDMetaId]
 		if !ok {
-			slog.Warn("invoice found without required invoice UUID metadata for yurid. this might have been created outside yurid, or something has gone wrong.", "invoice", inv)
+			slog.Warn("invoice without yurid invoice UUID metadata skipped", "invoice", inv)
 			continue
 		}
 

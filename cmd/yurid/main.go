@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
+	"slices"
 	"syscall"
 	"time"
 
@@ -21,7 +21,7 @@ import (
 )
 
 func main() {
-	debug := strings.Contains(strings.Join(os.Args, " "), "+debug")
+	debug := slices.Contains(os.Args, "+debug")
 	if debug {
 		slog.SetLogLoggerLevel(slog.LevelDebug)
 		slog.Info("log level set to debug")
@@ -86,7 +86,7 @@ func main() {
 		activeChainNames = append(activeChainNames, string(chain.Chain()))
 	}
 
-	api := yurid.NewAPI(conf.Addr, database, instance, activeChainNames, conf.APIToken)
+	api := yurid.NewAPI(database, instance, activeChainNames, conf.APIToken)
 
 	srv := &http.Server{
 		Addr:              conf.Addr,
