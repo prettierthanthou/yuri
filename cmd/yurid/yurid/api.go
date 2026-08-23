@@ -128,6 +128,7 @@ func wrapInvoice(id string, inv *yuri.Invoice) wrappedInvoice {
 	delete(cloned.Metadata, yuridInvoiceUUIDMetaId)
 	delete(cloned.Metadata, yuridInvoiceFiatMetaID)
 	delete(cloned.Metadata, yuridInvoiceExpireyMetaID)
+	delete(cloned.Metadata, yuridInvoiceIdempotencyMetaID)
 
 	return wrappedInvoice{
 		Id:      id,
