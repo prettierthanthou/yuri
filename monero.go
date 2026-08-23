@@ -12,24 +12,30 @@ var _ PricingSymbolProvider = monero{}
 
 const Monero Chain = "monero"
 
-// TODO: maybe allow passing the account_index.
-// for now, too bad!
+func NewMoneroWithAccountIndex(rpcConf JsonRpcClientConfig, accountIndex uint64) monero {
+	return monero{
+		accountIndex: accountIndex,
+		jsonRpc: NewJsonRpcClient(JsonRpcClientConfig{
+			Host:            rpcConf.Host,
+			Username:        rpcConf.Username,
+			Password:        rpcConf.Password,
+			Client:          rpcConf.Client,
+			NonB64BasicAuth: true,
+		}),
+	}
+}
 
 // NewMonero creates a new CryptoProvider for Monero/XMR
 //
-// This base implementation always uses account index 0 (zero)
+// This defaults to account index 0 (zero) for backwards compatibility.
+// You most likely want [NewMoneroWithAccountIndex]
 func NewMonero(rpcConf JsonRpcClientConfig) monero {
-	return monero{jsonRpc: NewJsonRpcClient(JsonRpcClientConfig{
-		Host:            rpcConf.Host,
-		Username:        rpcConf.Username,
-		Password:        rpcConf.Password,
-		Client:          rpcConf.Client,
-		NonB64BasicAuth: true,
-	})}
+	return NewMoneroWithAccountIndex(rpcConf, 0)
 }
 
 type monero struct {
-	jsonRpc JsonRpcClient
+	jsonRpc      JsonRpcClient
+	accountIndex uint64
 }
 
 // SupportsNFTs implements [CryptoProvider].
