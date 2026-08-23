@@ -18,6 +18,7 @@ import (
 const yuridInvoiceUUIDMetaId = "yurid-uuid"
 const yuridInvoiceExpireyMetaID = "yurid-expirey"
 const yuridInvoiceFiatMetaID = "yurid-fiat-hist"
+const yuridInvoiceIdempotencyMetaID = "yurid-idempotency"
 
 type DatabaseType string
 
@@ -38,6 +39,9 @@ var _ Database = (*database)(nil)
 type Database interface {
 	yuri.Storage
 	GetInvoiceByID(ctx context.Context, id string) (*yuri.Invoice, error)
+	// GetInvoiceByIdempotencyKey returns the invoice stored under the given
+	// idempotency key for a chain, or nil if none exists.
+	GetInvoiceByIdempotencyKey(ctx context.Context, chain yuri.Chain, key string) (*yuri.Invoice, error)
 	NewInvoiceWithExpirey(ctx context.Context, inv yuri.Invoice, expiresAt time.Time) (uuid.UUID, error)
 	ensureSchema() error
 }
@@ -142,6 +146,7 @@ func (d *database) ensureSchema() error {
 		metadata TEXT NOT NULL,
 		pending BOOLEAN NOT NULL DEFAULT FALSE,
 		expires_at TIMESTAMP,
+		idempotency_key TEXT,
 
 		UNIQUE(chain, address)
 	)
@@ -158,6 +163,24 @@ func (d *database) ensureSchema() error {
 		if !strings.Contains(msg, "duplicate column") && !strings.Contains(msg, "already exists") {
 			return fmt.Errorf("migrating pending column: %w", err)
 		}
+	}
+
+	// migrate databases created before idempotency keys were tracked
+	if _, err := d.db.Exec(d.rewrite(`
+		alter table "invoice" add column idempotency_key TEXT
+	`)); err != nil {
+		msg := strings.ToLower(err.Error())
+		if !strings.Contains(msg, "duplicate column") && !strings.Contains(msg, "already exists") {
+			return fmt.Errorf("migrating idempotency_key column: %w", err)
+		}
+	}
+
+	// A NULL idempotency_key (invoices created without one) is not subject to
+	// the uniqueness constraint: all SQL dialects treat NULLs as distinct.
+	if _, err := d.db.Exec(d.rewrite(`
+		create unique index if not exists "invoice_idempotency" on "invoice" (chain, idempotency_key)
+	`)); err != nil {
+		return fmt.Errorf("creating idempotency index: %w", err)
 	}
 
 	return nil
@@ -234,6 +257,31 @@ func (d *database) GetInvoiceByID(ctx context.Context, id string) (*yuri.Invoice
 	return inv, err
 }
 
+// GetInvoiceByIdempotencyKey implements [Database].
+func (d *database) GetInvoiceByIdempotencyKey(ctx context.Context, chain yuri.Chain, key string) (*yuri.Invoice, error) {
+	var id string
+	row := d.db.QueryRowContext(ctx, d.rewrite(`
+		select id, chain, address, amount_owed, amount_paid, token, metadata, pending, expires_at
+		from "invoice"
+		where chain = ? and idempotency_key = ?
+	`), chain, key)
+
+	inv, _, err := d.scanInvoice(row, &id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("querying invoice by idempotency key: %w", err)
+	}
+
+	if inv.Metadata == nil {
+		inv.Metadata = map[string]any{}
+	}
+	inv.Metadata[yuridInvoiceUUIDMetaId] = id
+
+	return inv, nil
+}
+
 // GetActiveInvoices implements [yuri.Storage].
 func (d *database) GetActiveInvoices(ctx context.Context, chain yuri.Chain) ([]yuri.Invoice, error) {
 	rows, err := d.db.QueryContext(ctx, d.rewrite(`
@@ -286,6 +334,14 @@ func (d *database) NewInvoiceWithExpirey(ctx context.Context, inv yuri.Invoice, 
 		return uuid.Nil, fmt.Errorf("uuid: %w", err)
 	}
 
+	idempotencyKey, _ := inv.Metadata[yuridInvoiceIdempotencyMetaID].(string)
+	delete(inv.Metadata, yuridInvoiceIdempotencyMetaID)
+
+	var idempotencyVal any
+	if idempotencyKey != "" {
+		idempotencyVal = idempotencyKey
+	}
+
 	inv.Metadata[yuridInvoiceUUIDMetaId] = id
 	metaJSON, err := json.Marshal(inv.Metadata)
 	if err != nil {
@@ -297,16 +353,26 @@ func (d *database) NewInvoiceWithExpirey(ctx context.Context, inv yuri.Invoice, 
 		return uuid.Nil, fmt.Errorf("token: %w", err)
 	}
 
-	conflict := d.upsertClause(
-		[]string{"chain", "address"},
-		[]string{"id", "amount_owed", "amount_paid", "token", "metadata", "pending", "expires_at"},
-	)
+	// When an idempotency key is present we must NOT use an UPSERT. On MySQL an
+	// "ON DUPLICATE KEY UPDATE" clause triggers on ANY unique violation,
+	// including the (chain, idempotency_key) index, which would silently
+	// overwrite the canonical invoice instead of failing. A plain INSERT lets
+	// the unique constraint raise an error on every dialect so the caller can
+	// re-query and return the existing invoice. Without an idempotency key we
+	// keep the original upsert-on-(chain, address) behaviour.
+	var conflict string
+	if idempotencyVal == nil {
+		conflict = d.upsertClause(
+			[]string{"chain", "address"},
+			[]string{"id", "amount_owed", "amount_paid", "token", "metadata", "pending", "expires_at"},
+		)
+	}
 
 	_, err = d.db.ExecContext(ctx, d.rewrite(fmt.Sprintf(`
 		insert into "invoice"
-			(id, chain, address, amount_owed, amount_paid, token, metadata, pending, expires_at)
+			(id, chain, address, amount_owed, amount_paid, token, metadata, pending, expires_at, idempotency_key)
 		values
-			(?, ?, ?, ?, ?, ?, ?, ?, ?)
+			(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		%s
 	`, conflict)),
 		id,
@@ -318,6 +384,7 @@ func (d *database) NewInvoiceWithExpirey(ctx context.Context, inv yuri.Invoice, 
 		metaJSON,
 		inv.Pending,
 		expiresAt,
+		idempotencyVal,
 	)
 
 	return id, err

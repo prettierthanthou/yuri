@@ -113,8 +113,6 @@ func decodeJSON(r *http.Request, dst any) error {
 
 const maxRequestBodySize = 1 << 20 // 1 MiB
 
-const yuridInvoiceIdempotencyMetaID = "yurid-idempotency"
-
 type wrappedInvoice struct {
 	Id   string `json:"id"`
 	Paid bool   `json:"paid"`
@@ -128,7 +126,6 @@ func wrapInvoice(id string, inv *yuri.Invoice) wrappedInvoice {
 	delete(cloned.Metadata, yuridInvoiceUUIDMetaId)
 	delete(cloned.Metadata, yuridInvoiceFiatMetaID)
 	delete(cloned.Metadata, yuridInvoiceExpireyMetaID)
-	delete(cloned.Metadata, yuridInvoiceIdempotencyMetaID)
 
 	return wrappedInvoice{
 		Id:      id,
@@ -280,19 +277,19 @@ func (a *API) handleNew(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	if req.Id != "" {
-		activeInvoices, err := a.storage.GetActiveInvoices(ctx, req.Chain)
+		existing, err := a.storage.GetInvoiceByIdempotencyKey(ctx, req.Chain, req.Id)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to fetch invoices", err)
+			writeError(w, http.StatusInternalServerError, "failed to check idempotency", err)
 			return
 		}
 
-		for i := range activeInvoices {
-			if seenId, ok := activeInvoices[i].Metadata[yuridInvoiceIdempotencyMetaID]; ok && seenId == req.Id {
-				a.respondWithInvoice(w, &activeInvoices[i])
-				return
-			}
+		if existing != nil {
+			a.respondWithInvoice(w, existing)
+			return
 		}
 
+		// carry the key to storage via reserved metadata; it is extracted into
+		// the idempotency_key column on insert.
 		req.Metadata[yuridInvoiceIdempotencyMetaID] = req.Id
 	}
 
@@ -303,6 +300,15 @@ func (a *API) handleNew(w http.ResponseWriter, r *http.Request) {
 
 	inv, err := a.instance.NewInvoice(ctx, req.InvoiceCreate)
 	if err != nil {
+		// a concurrent request with the same idempotency key may have inserted
+		// between our check and our insert, hitting the unique constraint.
+		// Re-query and, if the key now resolves, return the winning invoice.
+		if req.Id != "" {
+			if dup, derr := a.storage.GetInvoiceByIdempotencyKey(ctx, req.Chain, req.Id); derr == nil && dup != nil {
+				a.respondWithInvoice(w, dup)
+				return
+			}
+		}
 		writeError(w, http.StatusInternalServerError, "failed to create invoice", err)
 		return
 	}

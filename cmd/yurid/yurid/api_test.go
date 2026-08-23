@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -65,6 +66,7 @@ func newTestAPIWith(t *testing.T, chain yuri.CryptoProvider, token string) *API 
 	if err != nil {
 		t.Fatalf("database = %+v", err)
 	}
+	db.db.SetMaxOpenConns(1)
 
 	instance, err := yuri.New(yuri.Options{
 		Pricing:         []yuri.PriceProvider{yuri.NewStaticPriceProvider(1)},
@@ -474,6 +476,77 @@ func TestNew_IdempotencyKey(t *testing.T) {
 	}
 }
 
+func TestNew_IdempotencyKeyConcurrent(t *testing.T) {
+	api := newTestAPI(t)
+
+	body := []byte(`{"chain":"ethereum","amount_fiat":{"currency":{"code":"EUR","decimals":2},"minor":500},"id":"order-concurrent"}`)
+
+	const n = 32
+	var (
+		mu        sync.Mutex
+		responses []struct {
+			Id string `json:"id"`
+		}
+	)
+	errs := make(chan error, n)
+
+	for i := 0; i < n; i++ {
+		go func() {
+			resp, b := postNew(t, api, body)
+			if resp.StatusCode != http.StatusOK {
+				errs <- fmt.Errorf("StatusCode = %d expected = 200 (body = %s)", resp.StatusCode, b)
+				return
+			}
+			var r struct {
+				Id string `json:"id"`
+			}
+			if err := json.Unmarshal(b, &r); err != nil {
+				errs <- err
+				return
+			}
+			mu.Lock()
+			responses = append(responses, r)
+			mu.Unlock()
+			errs <- nil
+		}()
+	}
+
+	for i := 0; i < n; i++ {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mu.Lock()
+	if len(responses) != n {
+		mu.Unlock()
+		t.Fatalf("got %d responses expected %d", len(responses), n)
+	}
+
+	first := responses[0].Id
+	for _, r := range responses {
+		if r.Id != first {
+			mu.Unlock()
+			t.Fatalf("concurrent idempotency request returned divergent invoice id %q, expected %q", r.Id, first)
+		}
+	}
+	mu.Unlock()
+
+	active := getActive(t, api, string(yuri.Ethereum))
+	activeBody, _ := io.ReadAll(active.Result().Body)
+	if active.Result().StatusCode != 200 {
+		t.Fatalf("active StatusCode = %d expected = 200 (body = %s)", active.Result().StatusCode, activeBody)
+	}
+
+	var activeInvoices map[string]json.RawMessage
+	if err := json.Unmarshal(activeBody, &activeInvoices); err != nil {
+		t.Fatal(err)
+	}
+	if len(activeInvoices) != 1 {
+		t.Fatalf("len(activeInvoices) = %d expected = 1 (idempotency guard failed)", len(activeInvoices))
+	}
+}
+
 func TestNew_StripsReservedMetadataKeys(t *testing.T) {
 	api := newTestAPI(t)
 
@@ -503,6 +576,33 @@ func TestNew_StripsReservedMetadataKeys(t *testing.T) {
 	}
 	if inv.Metadata["client-key"] != "keep" {
 		t.Fatalf("stored invoice metadata missing non-reserved key: %#v", inv.Metadata)
+	}
+}
+
+func TestNew_MultipleWithoutIdempotency(t *testing.T) {
+	api := newTestAPI(t)
+
+	body := []byte(`{"chain":"ethereum","amount_fiat":{"currency":{"code":"EUR","decimals":2},"minor":500}}`)
+
+	for i := 0; i < 3; i++ {
+		resp, b := postNew(t, api, body)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("StatusCode = %d expected = 200 (body = %s)", resp.StatusCode, b)
+		}
+	}
+
+	active := getActive(t, api, string(yuri.Ethereum))
+	activeBody, _ := io.ReadAll(active.Result().Body)
+	if active.Result().StatusCode != 200 {
+		t.Fatalf("active StatusCode = %d expected = 200 (body = %s)", active.Result().StatusCode, activeBody)
+	}
+
+	var activeInvoices map[string]json.RawMessage
+	if err := json.Unmarshal(activeBody, &activeInvoices); err != nil {
+		t.Fatal(err)
+	}
+	if len(activeInvoices) != 3 {
+		t.Fatalf("len(activeInvoices) = %d expected = 3 (empty idempotency key must not collide)", len(activeInvoices))
 	}
 }
 
