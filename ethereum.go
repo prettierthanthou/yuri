@@ -177,7 +177,7 @@ func (e ethereumLike) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, 
 
 		pending *big.Int
 		// confirmed bal
-		latest *big.Int
+		safe *big.Int
 	}
 
 	balances := make(map[string]*balanceBalance, len(invoices))
@@ -195,7 +195,7 @@ func (e ethereumLike) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, 
 
 		inv := invoices[i]
 		if inv.Token != (Token{}) && inv.Token.Symbol == NftSymbol {
-			latest, pending, err := e.erc721Ownership(ctx, inv.Address, inv.Token)
+			safe, pending, err := e.erc721Ownership(ctx, inv.Address, inv.Token)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("invoice %s (nft %s): %w", inv.Address, inv.Token.Contract, err))
 				skipped[tokenBalanceKey(inv.Address, inv.Token)] = true
@@ -204,14 +204,14 @@ func (e ethereumLike) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, 
 
 			key := tokenBalanceKey(inv.Address, inv.Token)
 			balances[key] = &balanceBalance{
-				latest:  latest,
+				safe:    safe,
 				pending: pending,
 			}
 			continue
 		}
 
 		if inv.Token == (Token{}) {
-			latest, pending, err := e.nativeBalance(ctx, inv.Address)
+			safe, pending, err := e.nativeBalance(ctx, inv.Address)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("invoice %s (native): %w", inv.Address, err))
 				skipped[inv.Address] = true
@@ -220,12 +220,12 @@ func (e ethereumLike) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, 
 
 			balances[inv.Address] = &balanceBalance{
 				pending: pending,
-				latest:  latest,
+				safe:    safe,
 			}
 			continue
 		}
 
-		latest, pending, err := e.erc20Balance(ctx, inv.Address, inv.Token)
+		safe, pending, err := e.erc20Balance(ctx, inv.Address, inv.Token)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("invoice %s (token %s): %w", inv.Address, inv.Token.Contract, err))
 			skipped[tokenBalanceKey(inv.Address, inv.Token)] = true
@@ -235,7 +235,7 @@ func (e ethereumLike) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, 
 		key := tokenBalanceKey(inv.Address, inv.Token)
 		balances[key] = &balanceBalance{
 			pending: pending,
-			latest:  latest,
+			safe:    safe,
 		}
 	}
 
@@ -263,12 +263,12 @@ func (e ethereumLike) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, 
 
 		bal := balances[key]
 		if bal == nil {
-			bal = &balanceBalance{pending: new(big.Int), latest: new(big.Int)}
+			bal = &balanceBalance{pending: new(big.Int), safe: new(big.Int)}
 		}
 
 		updatedInvoice.AmountPaid = new(big.Int).Set(bal.pending)
 		updatedInvoice.Pending =
-			bal.latest.Cmp(updatedInvoice.AmountOwed) < 0 &&
+			bal.safe.Cmp(updatedInvoice.AmountOwed) < 0 &&
 				bal.pending.Cmp(updatedInvoice.AmountOwed) >= 0
 
 		if InvoicePollChanged(invoices[i], updatedInvoice) {
@@ -293,7 +293,7 @@ func (e ethereumLike) erc721Ownership(ctx context.Context, addr string, token To
 		return nil, nil, fmt.Errorf("failed to parse contract (%s) into NftIdentifier", token.Contract)
 	}
 
-	latest, err := e.rpcERC721Ownership(ctx, addr, nftIdentifier, "latest")
+	safe, err := e.rpcERC721Ownership(ctx, addr, nftIdentifier, "safe")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -303,7 +303,7 @@ func (e ethereumLike) erc721Ownership(ctx context.Context, addr string, token To
 		return nil, nil, err
 	}
 
-	return latest, pending, nil
+	return safe, pending, nil
 }
 
 func (e ethereumLike) rpcERC721Ownership(ctx context.Context, addr string, nftIdentifer NftIdentifier, tag string) (*big.Int, error) {
@@ -344,7 +344,7 @@ func erc721OwnerOfData(tokenID *big.Int) string {
 }
 
 func (e ethereumLike) nativeBalance(ctx context.Context, addr string) (*big.Int, *big.Int, error) {
-	latest, err := e.rpcHexBalance(ctx, "eth_getBalance", addr, "latest")
+	safe, err := e.rpcHexBalance(ctx, "eth_getBalance", addr, "safe")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -354,11 +354,11 @@ func (e ethereumLike) nativeBalance(ctx context.Context, addr string) (*big.Int,
 		return nil, nil, err
 	}
 
-	return latest, pending, nil
+	return safe, pending, nil
 }
 
 func (e ethereumLike) erc20Balance(ctx context.Context, addr string, token Token) (*big.Int, *big.Int, error) {
-	latest, err := e.rpcCallBalance(ctx, addr, token.Contract, "latest")
+	safe, err := e.rpcCallBalance(ctx, addr, token.Contract, "safe")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -368,7 +368,7 @@ func (e ethereumLike) erc20Balance(ctx context.Context, addr string, token Token
 		return nil, nil, err
 	}
 
-	return latest, pending, nil
+	return safe, pending, nil
 }
 
 func (e ethereumLike) rpcHexBalance(ctx context.Context, method, addr, tag string) (*big.Int, error) {

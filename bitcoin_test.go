@@ -315,7 +315,9 @@ func TestBitcoinPoll(t *testing.T) {
 		t.Fatalf("final payment: %v", err)
 	}
 
-	bitcoinMineBlocks(t, miner, minerAddr, 2)
+	// mine enough blocks that both payments exceed the required confirmation
+	// depth (bitcoinMinConfirmations) and the invoice settles.
+	bitcoinMineBlocks(t, miner, minerAddr, 8)
 
 	invoicesPoll3, err := provider.Poll(ctx, allInvoices)
 	if err != nil {

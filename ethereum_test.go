@@ -27,6 +27,7 @@ func ethereumHelperCreateEnv(t *testing.T) (JsonRpcClient, []string) {
 			"--host", "0.0.0.0",
 			"--port", "8545",
 			"--silent",
+			"--slots-in-an-epoch", "1",
 		},
 		Port:   "8545",
 		Mounts: nil,
@@ -309,10 +310,14 @@ func TestEthereumCreateAddressAndPoll(t *testing.T) {
 		t.Fatalf("expected token invoice to be settled")
 	}
 
-	if _, err := rpc.Do(ctx, JsonRpcRequest{
-		Method: "evm_mine",
-	}); err != nil {
-		t.Fatalf("evm_mine: %v", err)
+	// mine two blocks: the first includes the pending transfer, the second
+	// buries it one deep so it reaches the required confirmation depth.
+	for range 2 {
+		if _, err := rpc.Do(ctx, JsonRpcRequest{
+			Method: "evm_mine",
+		}); err != nil {
+			t.Fatalf("evm_mine: %v", err)
+		}
 	}
 
 	poll2Invoices, err := provider.Poll(ctx, allInvoices)
@@ -429,6 +434,16 @@ func ethereumFakeRpc(t *testing.T, balances map[string]string, fails map[string]
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if req.Method == "eth_blockNumber" {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{
+				"jsonrpc": "2.0",
+				"id":      req.Id,
+				"result":  "0x100",
+			})
 			return
 		}
 
@@ -663,6 +678,20 @@ func TestEthereumCreateAddressAndPollERC721(t *testing.T) {
 		},
 	}); err != nil {
 		t.Fatalf("anvil_setCode(new owner): %v", err)
+	}
+
+	// mine two blocks so the ownership change is confirmed at anvil's "safe"
+	// head (slots_in_an_epoch=1 makes "safe" = head-1; one mine buries the
+	// change, the second puts it behind "safe").
+	if _, err := rpc.Do(ctx, JsonRpcRequest{
+		Method: "evm_mine",
+	}); err != nil {
+		t.Fatalf("evm_mine: %v", err)
+	}
+	if _, err := rpc.Do(ctx, JsonRpcRequest{
+		Method: "evm_mine",
+	}); err != nil {
+		t.Fatalf("evm_mine: %v", err)
 	}
 
 	updates, err = provider.Poll(ctx, []Invoice{invoice})

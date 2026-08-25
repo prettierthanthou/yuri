@@ -15,24 +15,33 @@ const Dogecoin Chain = "dogecoin"
 var _ CryptoProvider = bitcoinLike{}
 var _ PricingSymbolProvider = bitcoinLike{}
 
+const (
+	bitcoinMinConfirmations  = 6
+	litecoinMinConfirmations = 6
+	dogecoinMinConfirmations = 12
+)
+
 func NewBitcoin(rpcConf JsonRpcClientConfig) bitcoinLike {
 	return bitcoinLike{
-		jsonRpc: NewJsonRpcClient(rpcConf),
-		chain:   Bitcoin,
+		jsonRpc:      NewJsonRpcClient(rpcConf),
+		chain:        Bitcoin,
+		confirmations: bitcoinMinConfirmations,
 	}
 }
 
 func NewLitecoin(rpcConf JsonRpcClientConfig) bitcoinLike {
 	return bitcoinLike{
-		jsonRpc: NewJsonRpcClient(rpcConf),
-		chain:   Litecoin,
+		jsonRpc:      NewJsonRpcClient(rpcConf),
+		chain:        Litecoin,
+		confirmations: litecoinMinConfirmations,
 	}
 }
 
 func NewDogecoin(rpcConf JsonRpcClientConfig) bitcoinLike {
 	return bitcoinLike{
-		jsonRpc: NewJsonRpcClient(rpcConf),
-		chain:   Dogecoin,
+		jsonRpc:      NewJsonRpcClient(rpcConf),
+		chain:        Dogecoin,
+		confirmations: dogecoinMinConfirmations,
 	}
 }
 
@@ -41,6 +50,8 @@ func NewDogecoin(rpcConf JsonRpcClientConfig) bitcoinLike {
 type bitcoinLike struct {
 	jsonRpc JsonRpcClient
 	chain   Chain
+
+	confirmations uint64
 }
 
 // SupportsNFTs implements [CryptoProvider].
@@ -159,7 +170,7 @@ func (b bitcoinLike) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, e
 
 		bal.total.Add(bal.total, sats)
 
-		if utxo.Confirmations > 0 {
+		if utxo.Confirmations >= b.confirmations {
 			bal.confirmed.Add(bal.confirmed, sats)
 		}
 	}
