@@ -144,7 +144,7 @@ func (i *Instance) runChain(
 			return i.poll(derivedCtx, chain, provider)
 		}()
 		if err != nil {
-			i.reportErr(fmt.Errorf("poll (%s): %+v", chain, err))
+			i.reportErr(fmt.Errorf("poll (%s): %w", chain, err))
 		}
 		cancel()
 
@@ -164,7 +164,7 @@ func (i *Instance) poll(
 ) error {
 	invoices, err := i.opts.Storage.GetActiveInvoices(ctx, chain)
 	if err != nil {
-		return fmt.Errorf("failed to fetch active invoices: %+v", err)
+		return fmt.Errorf("failed to fetch active invoices: %w", err)
 	}
 
 	updatedInvoices, err := provider.Poll(ctx, invoices)
@@ -172,20 +172,20 @@ func (i *Instance) poll(
 		// Poll returns nil when the whole cycle failed; an empty non-nil
 		// slice just means nothing changed.
 		if updatedInvoices == nil {
-			return fmt.Errorf("failed during CryptoProvider poll cycle: %+v", err)
+			return fmt.Errorf("failed during CryptoProvider poll cycle: %w", err)
 		}
 
-		i.reportErr(fmt.Errorf("partial poll (%s): %+v", chain, err))
+		i.reportErr(fmt.Errorf("partial poll (%s): %w", chain, err))
 	}
 
 	if err := i.opts.Storage.UpdateInvoices(ctx, updatedInvoices); err != nil {
-		return fmt.Errorf("failed to UpdateInvoices: %+v", err)
+		return fmt.Errorf("failed to UpdateInvoices: %w", err)
 	}
 
 	for _, updated := range updatedInvoices {
 		if i.opts.Hooks.OnInvoiceUpdated != nil {
 			if err := i.opts.Hooks.OnInvoiceUpdated(ctx, updated); err != nil {
-				i.reportErr(fmt.Errorf("failed to update invoices: %+v", err))
+				i.reportErr(fmt.Errorf("failed to update invoices: %w", err))
 			}
 		}
 	}
@@ -256,7 +256,7 @@ func (i *Instance) getPrice(ctx context.Context, currency Currency, chain Crypto
 		}
 
 		if len(quoteErrs) > 0 {
-			return 0, fmt.Errorf("failed to aggregate prices: %+v (provider errors: %s)", err, strings.Join(quoteErrs, "; "))
+			return 0, fmt.Errorf("failed to aggregate prices: %w (provider errors: %s)", err, strings.Join(quoteErrs, "; "))
 		}
 
 		return 0, err
@@ -296,7 +296,7 @@ func (i *Instance) NewNFTInvoice(ctx context.Context, invoiceCreate InvoiceCreat
 
 	addr, err := chain.CreateAddress(ctx)
 	if err != nil {
-		return Invoice{}, fmt.Errorf("failed to create address for invoice: err = %+v invoice = %+v", err, invoiceCreate)
+		return Invoice{}, fmt.Errorf("failed to create address for invoice: err = %w invoice = %+v", err, invoiceCreate)
 	}
 
 	inv := Invoice{
@@ -310,7 +310,7 @@ func (i *Instance) NewNFTInvoice(ctx context.Context, invoiceCreate InvoiceCreat
 	}
 
 	if err := i.opts.Storage.NewInvoice(ctx, inv); err != nil {
-		return Invoice{}, fmt.Errorf("failed to save invoice to storage: %+v", err)
+		return Invoice{}, fmt.Errorf("failed to save invoice to storage: %w", err)
 	}
 
 	return inv, nil
@@ -337,7 +337,7 @@ func (i *Instance) NewInvoice(ctx context.Context, invoiceCreate InvoiceCreate) 
 
 	aggregatedPrice, err := i.getPrice(ctx, invoiceCreate.AmountFiat.Currency, chain, invoiceCreate.Token)
 	if err != nil {
-		return Invoice{}, fmt.Errorf("failed to get average price for invoice create: err = %+v invoice = %+v", err, invoiceCreate)
+		return Invoice{}, fmt.Errorf("failed to get average price for invoice create: err = %w invoice = %+v", err, invoiceCreate)
 	}
 
 	if aggregatedPrice <= 0 {
@@ -378,7 +378,7 @@ func (i *Instance) NewInvoice(ctx context.Context, invoiceCreate InvoiceCreate) 
 
 	addr, err := chain.CreateAddress(ctx)
 	if err != nil {
-		return Invoice{}, fmt.Errorf("failed to create address for invoice: err = %+v invoice = %+v", err, invoiceCreate)
+		return Invoice{}, fmt.Errorf("failed to create address for invoice: err = %w invoice = %+v", err, invoiceCreate)
 	}
 
 	inv := Invoice{
@@ -392,7 +392,7 @@ func (i *Instance) NewInvoice(ctx context.Context, invoiceCreate InvoiceCreate) 
 	}
 
 	if err := i.opts.Storage.NewInvoice(ctx, inv); err != nil {
-		return Invoice{}, fmt.Errorf("failed to save invoice to storage: %+v", err)
+		return Invoice{}, fmt.Errorf("failed to save invoice to storage: %w", err)
 	}
 
 	return inv, nil

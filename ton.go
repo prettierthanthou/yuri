@@ -199,7 +199,7 @@ func NewTonWithConfigUrl(opts TonOptions, configUrl string) (tonProvider, error)
 		defer cancel()
 
 		if err := client.AddConnectionsFromConfigUrl(ctx, configUrl); err != nil {
-			return tonProvider{}, fmt.Errorf("ton AddConnectionsFromConfigUrl failed: %+v", err)
+			return tonProvider{}, fmt.Errorf("ton AddConnectionsFromConfigUrl failed: %w", err)
 		}
 
 		api := ton.NewAPIClient(client)
