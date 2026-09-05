@@ -16,8 +16,10 @@ import (
 
 const Ton Chain = "ton"
 
-var _ CryptoProvider = tonProvider{}
-var _ PricingSymbolProvider = tonProvider{}
+var (
+	_ CryptoProvider        = tonProvider{}
+	_ PricingSymbolProvider = tonProvider{}
+)
 
 type chainBlock struct {
 	inner *ton.BlockIDExt
@@ -128,27 +130,23 @@ func (c *tonChainClient) NFTOwner(
 		return "", fmt.Errorf("invalid TON NFT index %s", asset)
 	}
 
-	collectionClient :=
-		nft.NewCollectionClient(c.api, collectionAddr)
+	collectionClient := nft.NewCollectionClient(c.api, collectionAddr)
 
-	itemAddr, err :=
-		collectionClient.GetNFTAddressByIndexAtBlock(
-			ctx,
-			index,
-			block.inner,
-		)
+	itemAddr, err := collectionClient.GetNFTAddressByIndexAtBlock(
+		ctx,
+		index,
+		block.inner,
+	)
 	if err != nil {
 		return "", err
 	}
 
-	itemClient :=
-		nft.NewItemClient(c.api, itemAddr)
+	itemClient := nft.NewItemClient(c.api, itemAddr)
 
-	data, err :=
-		itemClient.GetNFTDataAtBlock(
-			ctx,
-			block.inner,
-		)
+	data, err := itemClient.GetNFTDataAtBlock(
+		ctx,
+		block.inner,
+	)
 	if err != nil {
 		return "", err
 	}
@@ -161,8 +159,10 @@ type TonOptions struct {
 	Hooks  ProviderHooks
 }
 
-const TonMainnetPublic = "https://ton-blockchain.github.io/global.config.json"
-const TonTestnetPublic = "https://ton-blockchain.github.io/testnet-global.config.json"
+const (
+	TonMainnetPublic = "https://ton-blockchain.github.io/global.config.json"
+	TonTestnetPublic = "https://ton-blockchain.github.io/testnet-global.config.json"
+)
 
 // MustTon creates a new [tonProvider]. If there is not a [chainClient] provided
 // a [liteclient.ConnectionPool] with [TonMainnetPublic] connections is created.
@@ -173,14 +173,14 @@ const TonTestnetPublic = "https://ton-blockchain.github.io/testnet-global.config
 //
 //	MustTon(opts, TonMainnetPublic)
 func MustTon(opts TonOptions) tonProvider {
-	return MustTonWithConfigUrl(opts, TonMainnetPublic)
+	return MustTonWithConfigURL(opts, TonMainnetPublic)
 }
 
-// MustTonWithConfigUrl creates a new [tonProvider] and configures a [liteclient.ConnectionPool]
+// MustTonWithConfigURL creates a new [tonProvider] and configures a [liteclient.ConnectionPool]
 // to the provided [configUrl]
-// MustTonWithConfigUrl will panic if ConfigURL to add Connections from fails!
-func MustTonWithConfigUrl(opts TonOptions, configUrl string) tonProvider {
-	p, err := NewTonWithConfigUrl(opts, configUrl)
+// MustTonWithConfigURL will panic if ConfigURL to add Connections from fails!
+func MustTonWithConfigURL(opts TonOptions, configUrl string) tonProvider {
+	p, err := NewTonWithConfigURL(opts, configUrl)
 	if err != nil {
 		panic(err)
 	}
@@ -189,10 +189,10 @@ func MustTonWithConfigUrl(opts TonOptions, configUrl string) tonProvider {
 }
 
 func NewTon(opts TonOptions) (tonProvider, error) {
-	return NewTonWithConfigUrl(opts, TonMainnetPublic)
+	return NewTonWithConfigURL(opts, TonMainnetPublic)
 }
 
-func NewTonWithConfigUrl(opts TonOptions, configUrl string) (tonProvider, error) {
+func NewTonWithConfigURL(opts TonOptions, configUrl string) (tonProvider, error) {
 	if opts.Client == nil {
 		client := liteclient.NewConnectionPool()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -253,16 +253,14 @@ func (t tonProvider) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, e
 
 		switch {
 		case updated.Token == (Token{}):
-			updated.AmountPaid, err =
-				t.api.NativeBalance(
-					ctx,
-					block,
-					updated.Address,
-				)
+			updated.AmountPaid, err = t.api.NativeBalance(
+				ctx,
+				block,
+				updated.Address,
+			)
 
 		case updated.Token.Symbol == NftSymbol:
-			nft, ok :=
-				NftIdentifierFromString(updated.Token.Contract)
+			nft, ok := NftIdentifierFromString(updated.Token.Contract)
 
 			if !ok {
 				return nil, fmt.Errorf(
@@ -271,13 +269,12 @@ func (t tonProvider) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, e
 				)
 			}
 
-			owner, err :=
-				t.api.NFTOwner(
-					ctx,
-					block,
-					nft.Collection,
-					nft.Asset,
-				)
+			owner, err := t.api.NFTOwner(
+				ctx,
+				block,
+				nft.Collection,
+				nft.Asset,
+			)
 
 			if err == nil && owner == updated.Address {
 				updated.AmountPaid = big.NewInt(1)
@@ -286,13 +283,12 @@ func (t tonProvider) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, e
 			}
 
 		default:
-			updated.AmountPaid, err =
-				t.api.JettonBalance(
-					ctx,
-					block,
-					updated.Address,
-					updated.Token.Contract,
-				)
+			updated.AmountPaid, err = t.api.JettonBalance(
+				ctx,
+				block,
+				updated.Address,
+				updated.Token.Contract,
+			)
 		}
 
 		if err != nil {

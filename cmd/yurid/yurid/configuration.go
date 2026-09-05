@@ -303,7 +303,7 @@ func buildChainProviders(chainConfigs map[yuri.Chain]*CryptoConfiguration, clien
 				host = yuri.TonMainnetPublic
 			}
 
-			ton, err := yuri.NewTonWithConfigUrl(yuri.TonOptions{Hooks: hooks}, host)
+			ton, err := yuri.NewTonWithConfigURL(yuri.TonOptions{Hooks: hooks}, host)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create TON provider: %w", err)
 			}
@@ -385,7 +385,7 @@ func walletHooks(chain yuri.Chain, walletOutDir string) (yuri.ProviderHooks, err
 			return os.WriteFile(
 				path.Join(walletOutDir, base64.RawStdEncoding.EncodeToString(edPub)),
 				edPriv,
-				0600,
+				0o600,
 			)
 		},
 	}, nil
