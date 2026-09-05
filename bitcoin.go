@@ -8,12 +8,16 @@ import (
 	"strings"
 )
 
-const Bitcoin Chain = "bitcoin"
-const Litecoin Chain = "litecoin"
-const Dogecoin Chain = "dogecoin"
+const (
+	Bitcoin  Chain = "bitcoin"
+	Litecoin Chain = "litecoin"
+	Dogecoin Chain = "dogecoin"
+)
 
-var _ CryptoProvider = bitcoinLike{}
-var _ PricingSymbolProvider = bitcoinLike{}
+var (
+	_ CryptoProvider        = bitcoinLike{}
+	_ PricingSymbolProvider = bitcoinLike{}
+)
 
 const (
 	bitcoinMinConfirmations  = 6

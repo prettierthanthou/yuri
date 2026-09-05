@@ -95,7 +95,6 @@ func parseBody(resp *http.Response, out any) (err error) {
 	// 5 MB
 	const maxResponse = 5 << 20
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponse))
-
 	if err != nil {
 		return err
 	}

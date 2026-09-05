@@ -185,7 +185,6 @@ func TestInstanceNewInvoiceWithToken(t *testing.T) {
 			Decimals: 18,
 		},
 	})
-
 	if err != nil {
 		t.Fatalf("NewInvoice() error = %q wanted nil", err)
 	}
@@ -229,7 +228,6 @@ func TestInstanceNewInvoice(t *testing.T) {
 		Chain:      Chain("test"),
 		AmountFiat: USD.Of(3.50),
 	})
-
 	if err != nil {
 		t.Fatalf("NewInvoice() error = %q wanted nil", err)
 	}
@@ -281,7 +279,6 @@ func TestInstanceNewInvoiceWithMetadata(t *testing.T) {
 			"id": "123456",
 		},
 	})
-
 	if err != nil {
 		t.Fatalf("NewInvoice() error = %q wanted nil", err)
 	}

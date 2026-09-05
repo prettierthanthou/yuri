@@ -47,8 +47,10 @@ func NewSolana(opts SolanaOptions) solanaProvider {
 	}
 }
 
-var _ CryptoProvider = solanaProvider{}
-var _ PricingSymbolProvider = solanaProvider{}
+var (
+	_ CryptoProvider        = solanaProvider{}
+	_ PricingSymbolProvider = solanaProvider{}
+)
 
 type solanaProvider struct {
 	// latestStage is used in testing to allow for
@@ -266,7 +268,6 @@ func (s solanaProvider) rpcMultipleAccounts(
 	addrs []string,
 	commitment string,
 ) ([]*big.Int, error) {
-
 	var resp multipleAccountsResp
 
 	err := RPCDo(ctx, s.jsonRpc, JsonRpcRequest{

@@ -3,10 +3,9 @@ package yuri
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
-
-	"strings"
 )
 
 const DefaultPriceCacheTTL = 3 * time.Minute

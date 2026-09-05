@@ -167,7 +167,6 @@ func moneroGenerateBlocks(t *testing.T, daemonRpc JsonRpcClient, addr string, bl
 			"wallet_address":   addr,
 		},
 	})
-
 	if err != nil {
 		t.Fatalf("generateblocks = %q", err)
 	}

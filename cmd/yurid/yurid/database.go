@@ -15,10 +15,12 @@ import (
 	"github.com/google/uuid"
 )
 
-const yuridInvoiceUUIDMetaId = "yurid-uuid"
-const yuridInvoiceExpireyMetaID = "yurid-expirey"
-const yuridInvoiceFiatMetaID = "yurid-fiat-hist"
-const yuridInvoiceIdempotencyMetaID = "yurid-idempotency"
+const (
+	yuridInvoiceUUIDMetaId        = "yurid-uuid"
+	yuridInvoiceExpireyMetaID     = "yurid-expirey"
+	yuridInvoiceFiatMetaID        = "yurid-fiat-hist"
+	yuridInvoiceIdempotencyMetaID = "yurid-idempotency"
+)
 
 type DatabaseType string
 
@@ -33,8 +35,10 @@ type DatabaseConfig struct {
 	DSN  string
 }
 
-var _ yuri.Storage = (*database)(nil)
-var _ Database = (*database)(nil)
+var (
+	_ yuri.Storage = (*database)(nil)
+	_ Database     = (*database)(nil)
+)
 
 type Database interface {
 	yuri.Storage

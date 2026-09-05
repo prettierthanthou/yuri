@@ -8,14 +8,16 @@ import (
 	"strings"
 )
 
-const Ethereum Chain = "ethereum"
-const BNB Chain = "bnb"
-const Polygon Chain = "polygon"
-const Avalanche Chain = "avalanche"
-const Arbitrum Chain = "arbitrum"
-const Base Chain = "base"
-const Optimism Chain = "optimism"
-const Fantom Chain = "fantom"
+const (
+	Ethereum  Chain = "ethereum"
+	BNB       Chain = "bnb"
+	Polygon   Chain = "polygon"
+	Avalanche Chain = "avalanche"
+	Arbitrum  Chain = "arbitrum"
+	Base      Chain = "base"
+	Optimism  Chain = "optimism"
+	Fantom    Chain = "fantom"
+)
 
 // EthereumUSDT is USD(Tether) on Eth(eth) not Eth(base)
 var EthereumUSDT Token = Token{
@@ -31,8 +33,10 @@ var EthereumUSDC Token = Token{
 	Decimals: 6,
 }
 
-var _ CryptoProvider = ethereumLike{}
-var _ PricingSymbolProvider = ethereumLike{}
+var (
+	_ CryptoProvider        = ethereumLike{}
+	_ PricingSymbolProvider = ethereumLike{}
+)
 
 // NewEthereum constructs a new ethereumLike CryptoProvider preconfigured for the standard Eth chain.
 //

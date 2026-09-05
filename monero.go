@@ -7,8 +7,10 @@ import (
 	"math/big"
 )
 
-var _ CryptoProvider = monero{}
-var _ PricingSymbolProvider = monero{}
+var (
+	_ CryptoProvider        = monero{}
+	_ PricingSymbolProvider = monero{}
+)
 
 const Monero Chain = "monero"
 
@@ -166,7 +168,6 @@ func (m monero) CreateAddress(ctx context.Context) (string, error) {
 			"count":         1,
 		},
 	}, &resp)
-
 	if err != nil {
 		return "", err
 	}

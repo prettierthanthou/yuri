@@ -75,7 +75,6 @@ func TestTonProviderCreateAddress(t *testing.T) {
 
 	p := tonProvider{api: client}
 	addr, err := p.CreateAddress(context.Background())
-
 	if err != nil {
 		t.Fatalf("CreateAddress = %+v expected = nil", err)
 	}
