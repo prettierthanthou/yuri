@@ -249,6 +249,12 @@ func (t tonProvider) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, e
 	out := make([]Invoice, 0, len(invoices))
 
 	for _, inv := range invoices {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
 		updated := inv.Clone()
 
 		switch {
