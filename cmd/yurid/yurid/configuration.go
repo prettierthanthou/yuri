@@ -107,11 +107,43 @@ type CryptoConfiguration struct {
 }
 
 type Configuration struct {
-	Addr             string
-	Chains           []yuri.CryptoProvider
-	PricingProviders []yuri.PriceProvider
-	DatabaseConfig   DatabaseConfig
-	APIToken         string
+	Addr                 string
+	Chains               []yuri.CryptoProvider
+	PricingProviders     []yuri.PriceProvider
+	PricingProviderNames []string
+	DatabaseConfig       DatabaseConfig
+	APIToken             string
+}
+
+func (c Configuration) String() string {
+	b := strings.Builder{}
+
+	fmt.Fprintf(&b, "bound address: %s\n", c.Addr)
+
+	if c.APIToken != "" {
+		b.WriteString("API token: set\n")
+	} else {
+		b.WriteString("API token: not set\n")
+	}
+
+	chainNames := make([]string, 0, len(c.Chains))
+	for _, chain := range c.Chains {
+		chainNames = append(chainNames, string(chain.Chain()))
+	}
+	sort.Strings(chainNames)
+	fmt.Fprintf(&b, "chains: %s\n", strings.Join(chainNames, ", "))
+
+	providerNames := make([]string, 0, len(c.PricingProviderNames))
+	providerNames = append(providerNames, c.PricingProviderNames...)
+	sort.Strings(providerNames)
+	fmt.Fprintf(&b, "pricing providers: %s\n", strings.Join(providerNames, ", "))
+
+	fmt.Fprintf(&b, "database: %s\n", c.DatabaseConfig.Type)
+	if c.DatabaseConfig.DSN != "" {
+		fmt.Fprintf(&b, "database DSN: %s\n", c.DatabaseConfig.DSN)
+	}
+
+	return b.String()
 }
 
 func pricingProviderNames() []string {
@@ -235,11 +267,12 @@ func ParseConfig() (Configuration, error) {
 	}
 
 	return Configuration{
-		Addr:             addr,
-		APIToken:         apiToken,
-		Chains:           chains,
-		PricingProviders: priceProviders,
-		DatabaseConfig:   DatabaseConfig{Type: dbType, DSN: databaseDsn},
+		Addr:                 addr,
+		APIToken:             apiToken,
+		Chains:               chains,
+		PricingProviders:     priceProviders,
+		PricingProviderNames: pricingProviderNamesFlag,
+		DatabaseConfig:       DatabaseConfig{Type: dbType, DSN: databaseDsn},
 	}, nil
 }
 

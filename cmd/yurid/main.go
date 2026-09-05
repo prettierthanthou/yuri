@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
-	"slices"
 	"syscall"
 	"time"
 
@@ -21,12 +21,6 @@ import (
 )
 
 func main() {
-	debug := slices.Contains(os.Args, "+debug")
-	if debug {
-		slog.SetLogLoggerLevel(slog.LevelDebug)
-		slog.Info("log level set to debug")
-	}
-
 	conf, err := yurid.ParseConfig()
 	if err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -37,7 +31,8 @@ func main() {
 		return
 	}
 
-	slog.Debug("parsed configuration", "conf", conf)
+	slog.Info("starting yurid")
+	fmt.Print(conf.String())
 
 	wrappedPricingProviders := make([]yuri.PriceProvider, 0, len(conf.PricingProviders))
 	for _, provider := range conf.PricingProviders {
