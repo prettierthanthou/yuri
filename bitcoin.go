@@ -23,24 +23,24 @@ const (
 
 func NewBitcoin(rpcConf JsonRpcClientConfig) bitcoinLike {
 	return bitcoinLike{
-		jsonRpc:      NewJsonRpcClient(rpcConf),
-		chain:        Bitcoin,
+		jsonRpc:       NewJsonRpcClient(rpcConf),
+		chain:         Bitcoin,
 		confirmations: bitcoinMinConfirmations,
 	}
 }
 
 func NewLitecoin(rpcConf JsonRpcClientConfig) bitcoinLike {
 	return bitcoinLike{
-		jsonRpc:      NewJsonRpcClient(rpcConf),
-		chain:        Litecoin,
+		jsonRpc:       NewJsonRpcClient(rpcConf),
+		chain:         Litecoin,
 		confirmations: litecoinMinConfirmations,
 	}
 }
 
 func NewDogecoin(rpcConf JsonRpcClientConfig) bitcoinLike {
 	return bitcoinLike{
-		jsonRpc:      NewJsonRpcClient(rpcConf),
-		chain:        Dogecoin,
+		jsonRpc:       NewJsonRpcClient(rpcConf),
+		chain:         Dogecoin,
 		confirmations: dogecoinMinConfirmations,
 	}
 }
