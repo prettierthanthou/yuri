@@ -258,7 +258,7 @@ func (a *API) handleNew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.ExpiresAt != 0 && req.ExpiresAt <= time.Now().UnixMilli() {
+	if req.ExpiresAt != 0 && req.ExpiresAt < time.Now().UnixMilli() {
 		writeError(w, http.StatusBadRequest, "expires_at must be in the future (unix milliseconds)", nil)
 		return
 	}
