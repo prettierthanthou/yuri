@@ -183,6 +183,12 @@ func (d *database) ensureSchema() error {
 		return fmt.Errorf("creating idempotency index: %w", err)
 	}
 
+	if _, err := d.db.Exec(d.rewrite(`
+		create index if not exists "invoice_chain_expires" on "invoice" (chain, expires_at)
+	`)); err != nil {
+		return fmt.Errorf("creating chain+expires_at index: %w", err)
+	}
+
 	return nil
 }
 
@@ -287,26 +293,20 @@ func (d *database) GetActiveInvoices(ctx context.Context, chain yuri.Chain) ([]y
 	rows, err := d.db.QueryContext(ctx, d.rewrite(`
 		select id, chain, address, amount_owed, amount_paid, token, metadata, pending, expires_at
 		from "invoice"
-		where chain = ?
-	`), chain)
+		where chain = ? and (expires_at is null or expires_at > ?)
+	`), chain, time.Now())
 	if err != nil {
 		return nil, fmt.Errorf("querying invoices for chain %s: %w", chain, err)
 	}
 	defer rows.Close()
 
 	var invoices []yuri.Invoice
-	now := time.Now()
 
 	for rows.Next() {
 		var id string
-		inv, expiresAt, err := d.scanInvoice(rows, &id)
+		inv, _, err := d.scanInvoice(rows, &id)
 		if err != nil {
 			return nil, err
-		}
-
-		// NULL expiry means the invoice never expires
-		if expiresAt.Valid && expiresAt.Time.Before(now) {
-			continue
 		}
 
 		if !inv.Pending && inv.AmountPaid.Cmp(inv.AmountOwed) >= 0 {
