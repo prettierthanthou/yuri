@@ -163,7 +163,7 @@ func (m monero) CreateAddress(ctx context.Context) (string, error) {
 	err := RPCDo(ctx, m.jsonRpc, JsonRpcRequest{
 		Method: "create_address",
 		Params: map[string]any{
-			"account_index": 0,
+			"account_index": m.accountIndex,
 			"label":         "yuri CreateAddress",
 			"count":         1,
 		},
