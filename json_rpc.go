@@ -148,7 +148,8 @@ func (c JsonRpcClient) Do(ctx context.Context, request JsonRpcRequest) (jsonResp
 		}
 	}()
 
-	readBody, err := io.ReadAll(resp.Body)
+	// 5MiB
+	readBody, err := io.ReadAll(io.LimitReader(resp.Body, 5<<20))
 	if err != nil {
 		return JsonRpcResponse{}, err
 	}
