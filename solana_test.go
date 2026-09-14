@@ -115,9 +115,14 @@ func TestSolanaPollShortMultipleAccountsResponse(t *testing.T) {
 		{name: "short value", value: []any{map[string]any{"lamports": lamports}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			provider := NewSolana(SolanaOptions{
+			provider := MustSolana(SolanaOptions{
 				isTest: true,
 				Rpc:    solanaFakeRpc(t, tc.value).conf,
+				Hooks: ProviderHooks{
+					OnNewAddress: func(ctx context.Context, pk1 crypto.PublicKey, pk2 crypto.PrivateKey) error {
+						return nil
+					},
+				},
 			})
 
 			changed, err := provider.Poll(ctx, invoices)
@@ -182,9 +187,14 @@ func TestSolanaPollMalformedTokenAccounts(t *testing.T) {
 		{name: "short value", value: []any{map[string]any{"data": []any{}}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			provider := NewSolana(SolanaOptions{
+			provider := MustSolana(SolanaOptions{
 				isTest: true,
 				Rpc:    solanaFakeRpc(t, tc.value).conf,
+				Hooks: ProviderHooks{
+					OnNewAddress: func(ctx context.Context, pk1 crypto.PublicKey, pk2 crypto.PrivateKey) error {
+						return nil
+					},
+				},
 			})
 
 			changed, err := provider.Poll(ctx, invoices)
@@ -205,7 +215,9 @@ func TestSolanaPollMalformedTokenAccounts(t *testing.T) {
 }
 
 func TestSolanaChainAndDecimals(t *testing.T) {
-	s := NewSolana(SolanaOptions{})
+	s := MustSolana(SolanaOptions{
+		Hooks: ProviderHooks{OnNewAddress: func(ctx context.Context, pk1 crypto.PublicKey, pk2 crypto.PrivateKey) error { return nil }},
+	})
 
 	if s.Chain() != Solana {
 		t.Fatalf("expected Solana chain")
@@ -216,7 +228,7 @@ func TestSolanaChainAndDecimals(t *testing.T) {
 }
 
 func TestSolanaSupportsNFTs(t *testing.T) {
-	s := NewSolana(SolanaOptions{})
+	s := MustSolana(SolanaOptions{Hooks: ProviderHooks{OnNewAddress: func(ctx context.Context, pk1 crypto.PublicKey, pk2 crypto.PrivateKey) error { return nil }}})
 
 	if !s.SupportsNFTs() {
 		t.Fatalf("expected Solana SupportsNFTs to be truthy")
@@ -224,7 +236,7 @@ func TestSolanaSupportsNFTs(t *testing.T) {
 }
 
 func TestSolanaPriceSymbol(t *testing.T) {
-	s := NewSolana(SolanaOptions{})
+	s := MustSolana(SolanaOptions{Hooks: ProviderHooks{OnNewAddress: func(ctx context.Context, pk1 crypto.PublicKey, pk2 crypto.PrivateKey) error { return nil }}})
 
 	if s.PriceSymbol() != "SOL" {
 		t.Fatalf("Solana PriceSymbol expected = SOL got = %s", s.PriceSymbol())
@@ -263,7 +275,7 @@ func TestSolanaCreateAddressAndPoll(t *testing.T) {
 
 	var hookPub string
 
-	provider := NewSolana(SolanaOptions{
+	provider := MustSolana(SolanaOptions{
 		isTest: true,
 		Rpc:    rpc.conf,
 		Hooks: ProviderHooks{
@@ -440,9 +452,10 @@ echo "SENDER_ATA=$SENDER_ATA"
 		t.Fatalf("bad setup:\n%s", out)
 	}
 
-	chain := NewSolana(SolanaOptions{
+	chain := MustSolana(SolanaOptions{
 		isTest: true,
 		Rpc:    sol.conf,
+		Hooks:  ProviderHooks{OnNewAddress: func(ctx context.Context, pk1 crypto.PublicKey, pk2 crypto.PrivateKey) error { return nil }},
 	})
 
 	invoiceAddr, err := chain.CreateAddress(ctx)
@@ -555,9 +568,10 @@ echo "NFT_MINT=$NFT_MINT"
 		t.Fatalf("failed to create NFT:\n%s", out)
 	}
 
-	chain := NewSolana(SolanaOptions{
+	chain := MustSolana(SolanaOptions{
 		isTest: true,
 		Rpc:    sol.conf,
+		Hooks:  ProviderHooks{func(ctx context.Context, pk1 crypto.PublicKey, pk2 crypto.PrivateKey) error { return nil }},
 	})
 
 	addr, err := chain.CreateAddress(ctx)

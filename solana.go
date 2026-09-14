@@ -17,8 +17,7 @@ const Solana Chain = "solana"
 
 type SolanaOptions struct {
 	// Hooks directly manage storing the generated wallets, it is on you
-	// to store your wallets in a safe place... atleast if you want to get
-	// your funds out of the invoice wallets. heh..
+	// to store your wallets in a safe place. Hooks are required.
 	Hooks ProviderHooks
 	Rpc   JsonRpcClientConfig
 	// isTest is an internal flag to allow for `confirmed` to be used over `finalized`
@@ -27,24 +26,36 @@ type SolanaOptions struct {
 	isTest bool
 }
 
-// TODO: maybe stop people from being dumb and assuming
-// that they don't have to pass in the hooks. something like that.
-// but until this is v1000.00.05 i don't care! RTFM!
-
 // NewSolana creates a [solanaProvider] that can handle Lamports/SPLs.
 // NOTE: While Solana DOES have NFT support it is strictly just SPL NFTs (and maybe pNFT but this is untested!).
 // There is no support for cNFTs, or Token2022 NFTs.
-func NewSolana(opts SolanaOptions) solanaProvider {
+func NewSolana(opts SolanaOptions) (solanaProvider, error) {
 	latestStage := "finalized"
 	if opts.isTest {
 		latestStage = "confirmed"
+	}
+
+	if opts.Hooks.OnNewAddress == nil {
+		return solanaProvider{}, errors.New("solana requires hooks")
 	}
 
 	return solanaProvider{
 		jsonRpc:     NewJsonRpcClient(opts.Rpc),
 		hooks:       opts.Hooks,
 		latestStage: latestStage,
+	}, nil
+}
+
+// MustSolana creates a [solanaProvider] that can handle Lamports/SPLs.
+// NOTE: While Solana DOES have NFT support it is strictly just SPL NFTs (and maybe pNFT but this is untested!).
+// There is no support for cNFTs, or Token2022 NFTs.
+func MustSolana(opts SolanaOptions) solanaProvider {
+	s, err := NewSolana(opts)
+	if err != nil {
+		panic(fmt.Sprintf("MustSolana: %s", err.Error()))
 	}
+
+	return s
 }
 
 var (

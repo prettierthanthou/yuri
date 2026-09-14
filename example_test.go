@@ -98,7 +98,7 @@ func ExampleNew() {
 func ExampleNFT() {
 	instance, err := yuri.New(yuri.Options{
 		Chains: []yuri.CryptoProvider{
-			yuri.NewSolana(yuri.SolanaOptions{
+			yuri.MustSolana(yuri.SolanaOptions{
 				Hooks: yuri.ProviderHooks{
 					OnNewAddress: func(_ context.Context, pub crypto.PublicKey, _ crypto.PrivateKey) error {
 						// you are in charge of storing these keys!
@@ -146,7 +146,7 @@ func Example_storage() {
 		Chains: []yuri.CryptoProvider{
 			// solana generates addresses locally, so we do not
 			// need a node just to create an invoice.
-			yuri.NewSolana(yuri.SolanaOptions{}),
+			yuri.MustSolana(yuri.SolanaOptions{}),
 		},
 		Pricing: []yuri.PriceProvider{
 			yuri.NewStaticPriceProvider(100_000_000),
