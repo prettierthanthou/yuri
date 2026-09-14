@@ -2,6 +2,7 @@ package yuri
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 	"time"
@@ -171,7 +172,7 @@ const (
 //
 // This is equivilant to calling
 //
-//	MustTon(opts, TonMainnetPublic)
+//	MustTonWithConfigURL(opts, TonMainnetPublic)
 func MustTon(opts TonOptions) tonProvider {
 	return MustTonWithConfigURL(opts, TonMainnetPublic)
 }
@@ -182,7 +183,7 @@ func MustTon(opts TonOptions) tonProvider {
 func MustTonWithConfigURL(opts TonOptions, configUrl string) tonProvider {
 	p, err := NewTonWithConfigURL(opts, configUrl)
 	if err != nil {
-		panic(err)
+		panic(fmt.Sprintf("MustTonWithConfigUrl: %s", err.Error()))
 	}
 
 	return p
@@ -204,6 +205,10 @@ func NewTonWithConfigURL(opts TonOptions, configUrl string) (tonProvider, error)
 
 		api := ton.NewAPIClient(client)
 		opts.Client = &tonChainClient{api: api}
+	}
+
+	if opts.Hooks.OnNewAddress == nil {
+		return tonProvider{}, errors.New("ton requires hooks")
 	}
 
 	return tonProvider{api: opts.Client, hooks: opts.Hooks}, nil
