@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 type JsonRpcClientConfig struct {
@@ -23,9 +24,11 @@ type JsonRpcClientConfig struct {
 }
 
 func NewJsonRpcClient(conf JsonRpcClientConfig) JsonRpcClient {
-	client := http.DefaultClient
-	if conf.Client != nil {
-		client = conf.Client
+	var client *http.Client = conf.Client
+	if conf.Client == nil {
+		client = &http.Client{
+			Timeout: time.Second * 30,
+		}
 	}
 
 	return JsonRpcClient{conf: conf, httpClient: client}
