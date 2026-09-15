@@ -297,7 +297,9 @@ func (d *database) GetActiveInvoices(ctx context.Context, chain yuri.Chain) ([]y
 	rows, err := d.db.QueryContext(ctx, d.rewrite(`
 		select id, chain, address, amount_owed, amount_paid, token, metadata, pending, expires_at
 		from "invoice"
-		where chain = ? and (expires_at is null or expires_at > ?)
+		where chain = ?
+		  and (expires_at is null or expires_at > ?)
+		  and (pending or length(amount_paid) < length(amount_owed) or (length(amount_paid) = length(amount_owed) and amount_paid < amount_owed))
 	`), chain, time.Now())
 	if err != nil {
 		return nil, fmt.Errorf("querying invoices for chain %s: %w", chain, err)
@@ -311,10 +313,6 @@ func (d *database) GetActiveInvoices(ctx context.Context, chain yuri.Chain) ([]y
 		inv, _, err := d.scanInvoice(rows, &id)
 		if err != nil {
 			return nil, err
-		}
-
-		if !inv.Pending && inv.AmountPaid.Cmp(inv.AmountOwed) >= 0 {
-			continue
 		}
 
 		if inv.Metadata == nil {
