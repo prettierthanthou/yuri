@@ -320,10 +320,15 @@ func buildChainProviders(chainConfigs map[yuri.Chain]*CryptoConfiguration, clien
 				return nil, err
 			}
 
-			providers = append(providers, yuri.NewSolana(yuri.SolanaOptions{
+			sol, err := yuri.NewSolana(yuri.SolanaOptions{
 				Hooks: hooks,
 				Rpc:   rpc,
-			}))
+			})
+			if err != nil {
+				return nil, fmt.Errorf("failed to create Solana provider: %w", err)
+			}
+
+			providers = append(providers, sol)
 		default:
 			rpc, err := cfg.RPCConfig(chain, client)
 			if err != nil {
