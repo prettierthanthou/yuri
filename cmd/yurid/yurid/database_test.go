@@ -223,6 +223,82 @@ func TestGetActiveInvoices_LargeAmounts(t *testing.T) {
 	}
 }
 
+func TestGetActiveInvoices_SQLAmountComparisonNumeric(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+
+	// Unpaid with shorter paid digit count must NOT be hidden (finding: would be hidden).
+	_, err := db.NewInvoiceWithExpirey(ctx, yuri.Invoice{
+		Chain:      yuri.Ethereum,
+		Address:    "0xshort-paid",
+		AmountOwed: big.NewInt(1000),
+		AmountPaid: big.NewInt(99),
+		Token:      yuri.EthereumUSDT,
+	}, time.Now().Add(time.Hour))
+	if err != nil {
+		t.Fatalf("insert short-paid: %v", err)
+	}
+
+	// Overpaid with shorter owed digit count must NOT be shown (finding: shown incorrectly).
+	_, err = db.NewInvoiceWithExpirey(ctx, yuri.Invoice{
+		Chain:      yuri.Ethereum,
+		Address:    "0xshort-owed",
+		AmountOwed: big.NewInt(99),
+		AmountPaid: big.NewInt(1000),
+		Token:      yuri.EthereumUSDT,
+	}, time.Now().Add(time.Hour))
+	if err != nil {
+		t.Fatalf("insert short-owed: %v", err)
+	}
+
+	// Same-digit unpaid.
+	_, err = db.NewInvoiceWithExpirey(ctx, yuri.Invoice{
+		Chain:      yuri.Ethereum,
+		Address:    "0xsame-digit-unpaid",
+		AmountOwed: big.NewInt(500),
+		AmountPaid: big.NewInt(499),
+		Token:      yuri.EthereumUSDT,
+	}, time.Now().Add(time.Hour))
+	if err != nil {
+		t.Fatalf("insert same-digit-unpaid: %v", err)
+	}
+
+	// Same-digit overpaid.
+	_, err = db.NewInvoiceWithExpirey(ctx, yuri.Invoice{
+		Chain:      yuri.Ethereum,
+		Address:    "0xsame-digit-overpaid",
+		AmountOwed: big.NewInt(499),
+		AmountPaid: big.NewInt(500),
+		Token:      yuri.EthereumUSDT,
+	}, time.Now().Add(time.Hour))
+	if err != nil {
+		t.Fatalf("insert same-digit-overpaid: %v", err)
+	}
+
+	invoices, err := db.GetActiveInvoices(ctx, yuri.Ethereum)
+	if err != nil {
+		t.Fatalf("GetActiveInvoices: %v", err)
+	}
+
+	addrs := map[string]bool{}
+	for _, inv := range invoices {
+		addrs[inv.Address] = true
+	}
+
+	if !addrs["0xshort-paid"] {
+		t.Error("unpaid with shorter paid digit count incorrectly hidden")
+	}
+	if addrs["0xshort-owed"] {
+		t.Error("overpaid with shorter owed digit count incorrectly shown")
+	}
+	if !addrs["0xsame-digit-unpaid"] {
+		t.Error("same-digit unpaid invoice incorrectly hidden")
+	}
+	if addrs["0xsame-digit-overpaid"] {
+		t.Error("same-digit overpaid invoice incorrectly shown")
+	}
+}
+
 func TestGetActiveInvoices_DifferentDigitCounts(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
