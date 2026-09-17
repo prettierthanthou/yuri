@@ -146,7 +146,14 @@ func Example_storage() {
 		Chains: []yuri.CryptoProvider{
 			// solana generates addresses locally, so we do not
 			// need a node just to create an invoice.
-			yuri.MustSolana(yuri.SolanaOptions{}),
+			yuri.MustSolana(yuri.SolanaOptions{
+				Hooks: yuri.ProviderHooks{
+					OnNewAddress: func(ctx context.Context, pk1 crypto.PublicKey, pk2 crypto.PrivateKey) error {
+						// save to a file, or something...
+						return nil
+					},
+				},
+			}),
 		},
 		Pricing: []yuri.PriceProvider{
 			yuri.NewStaticPriceProvider(100_000_000),
