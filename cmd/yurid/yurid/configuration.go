@@ -393,7 +393,7 @@ func walletHooks(chain yuri.Chain, walletOutDir string) (yuri.ProviderHooks, err
 			}
 
 			return os.WriteFile(
-				path.Join(walletOutDir, base64.RawStdEncoding.EncodeToString(edPub)),
+				path.Join(walletOutDir, base64.URLEncoding.EncodeToString(edPub)),
 				edPriv,
 				0o600,
 			)
