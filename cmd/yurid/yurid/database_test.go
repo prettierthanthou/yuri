@@ -275,6 +275,17 @@ func TestGetActiveInvoices_SQLAmountComparisonNumeric(t *testing.T) {
 		t.Fatalf("insert same-digit-overpaid: %v", err)
 	}
 
+	_, err = db.NewInvoiceWithExpirey(ctx, yuri.Invoice{
+		Chain:      yuri.Ethereum,
+		Address:    "0x-lower-digit-unpaid",
+		AmountOwed: big.NewInt(100),
+		AmountPaid: big.NewInt(9),
+		Token:      yuri.EthereumUSDT,
+	}, time.Now().Add(time.Hour))
+	if err != nil {
+		t.Fatalf("insert lower-digit-unpaid: %v", err)
+	}
+
 	invoices, err := db.GetActiveInvoices(ctx, yuri.Ethereum)
 	if err != nil {
 		t.Fatalf("GetActiveInvoices: %v", err)
@@ -285,6 +296,9 @@ func TestGetActiveInvoices_SQLAmountComparisonNumeric(t *testing.T) {
 		addrs[inv.Address] = true
 	}
 
+	if !addrs["0x-lower-digit-unpaid"] {
+		t.Error("unpaid with lower digit count incorrectly hidden")
+	}
 	if !addrs["0xshort-paid"] {
 		t.Error("unpaid with shorter paid digit count incorrectly hidden")
 	}
