@@ -16,6 +16,7 @@ import (
 	"path"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -147,6 +148,27 @@ func (c Configuration) String() string {
 	return b.String()
 }
 
+func envName(flag string) string {
+	return "YURID_" + strings.ToUpper(strings.ReplaceAll(flag, "-", "_"))
+}
+
+func envString(flag string) (string, bool) {
+	v, ok := os.LookupEnv(envName(flag))
+	return v, ok
+}
+
+func envBool(flag string) (bool, bool) {
+	v, ok := os.LookupEnv(envName(flag))
+	if !ok {
+		return false, false
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return false, false
+	}
+	return b, true
+}
+
 func pricingProviderNames() []string {
 	names := make([]string, 0, len(supportedPricingProviders))
 	for name := range supportedPricingProviders {
@@ -196,25 +218,44 @@ func ParseConfig() (Configuration, error) {
 	fs := flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
 
 	var debug bool
-	fs.BoolVar(&debug, "debug", false, "enables debugging logs, this will print sensitive data!")
+	if v, ok := envBool("debug"); ok {
+		debug = v
+	}
+	fs.BoolVar(&debug, "debug", debug, "enables debugging logs, this will print sensitive data!")
 
 	var addr string
-	fs.StringVar(&addr, "addr", ":6761", "address to bind to")
+	addr = ":6761"
+	if v, ok := envString("addr"); ok {
+		addr = v
+	}
+	fs.StringVar(&addr, "addr", addr, "address to bind to")
 
 	var apiToken string
-	fs.StringVar(&apiToken, "api-token", "", "optional bearer token required by the REST API")
+	if v, ok := envString("api-token"); ok {
+		apiToken = v
+	}
+	fs.StringVar(&apiToken, "api-token", apiToken, "optional bearer token required by the REST API")
 
 	var globalProxy string
+	if v, ok := envString("proxy"); ok {
+		globalProxy = v
+	}
 	fs.StringVar(
 		&globalProxy,
 		"proxy",
-		"",
+		globalProxy,
 		"Global SOCKS5 proxy used unless overridden by a chain.",
 	)
 
 	var databaseType, databaseDsn string
-	fs.StringVar(&databaseType, "database-type", "", "database type (sqlite|mysql|postgresql)")
-	fs.StringVar(&databaseDsn, "database-dsn", "", "database DSN")
+	if v, ok := envString("database-type"); ok {
+		databaseType = v
+	}
+	if v, ok := envString("database-dsn"); ok {
+		databaseDsn = v
+	}
+	fs.StringVar(&databaseType, "database-type", databaseType, "database type (sqlite|mysql|postgresql)")
+	fs.StringVar(&databaseDsn, "database-dsn", databaseDsn, "database DSN")
 
 	chainConfigs := make(map[yuri.Chain]*CryptoConfiguration)
 
@@ -224,17 +265,36 @@ func ParseConfig() (Configuration, error) {
 
 		prefix := string(chain)
 
-		fs.StringVar(&cfg.Host, prefix+"-host", "", "JSON-RPC host")
-		fs.StringVar(&cfg.Username, prefix+"-username", "", "JSON-RPC username")
-		fs.StringVar(&cfg.Password, prefix+"-password", "", "JSON-RPC password")
-		fs.StringVar(&cfg.Proxy, prefix+"-proxy", "", "SOCKS5 proxy")
+		if v, ok := envString(prefix + "-host"); ok {
+			cfg.Host = v
+		}
+		if v, ok := envString(prefix + "-username"); ok {
+			cfg.Username = v
+		}
+		if v, ok := envString(prefix + "-password"); ok {
+			cfg.Password = v
+		}
+		if v, ok := envString(prefix + "-proxy"); ok {
+			cfg.Proxy = v
+		}
+
+		fs.StringVar(&cfg.Host, prefix+"-host", cfg.Host, "JSON-RPC host")
+		fs.StringVar(&cfg.Username, prefix+"-username", cfg.Username, "JSON-RPC username")
+		fs.StringVar(&cfg.Password, prefix+"-password", cfg.Password, "JSON-RPC password")
+		fs.StringVar(&cfg.Proxy, prefix+"-proxy", cfg.Proxy, "SOCKS5 proxy")
 
 		if chain == yuri.Solana || chain == yuri.Ton {
-			fs.StringVar(&cfg.walletOutDir, prefix+"-wallet-dir", "", "output directory for wallets")
+			if v, ok := envString(prefix + "-wallet-dir"); ok {
+				cfg.walletOutDir = v
+			}
+			fs.StringVar(&cfg.walletOutDir, prefix+"-wallet-dir", cfg.walletOutDir, "output directory for wallets")
 		}
 	}
 
 	var pricingProviderNamesFlag pricingProviderSliceFlag
+	if v, ok := envString("price"); ok {
+		_ = pricingProviderNamesFlag.Set(v)
+	}
 	fs.Var(
 		&pricingProviderNamesFlag,
 		"price",
