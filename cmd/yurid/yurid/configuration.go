@@ -413,7 +413,7 @@ func (c CryptoConfiguration) Validate(chain yuri.Chain) error {
 	switch {
 	case !c.Enabled():
 		return nil
-	case chain == yuri.Ton:
+	case chain == yuri.Ton || chain == yuri.Solana:
 		// TON defaults to the public mainnet config, host is optional
 		if c.walletOutDir == "" {
 			return fmt.Errorf("%s: wallet-dir is required", chain)
