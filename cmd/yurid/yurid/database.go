@@ -61,11 +61,13 @@ func NewDatabase(conf DatabaseConfig) (*database, error) {
 		driver = "pgx"
 	}
 
+	slog.Debug("connecting to database", "typ", conf.Type, "dsn", conf.DSN)
 	db, err := sql.Open(driver, conf.DSN)
 	if err != nil {
 		return nil, err
 	}
 
+	slog.Debug("ensuring database schema")
 	database := &database{conf: conf, db: db}
 	if err := database.ensureSchema(); err != nil {
 		return nil, err
