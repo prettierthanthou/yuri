@@ -1,6 +1,9 @@
-# yuri
-
-![yuri cover art](assets/artwork.jpg)
+<table>
+  <tr>
+    <td><h1>yuri</h1></td>
+    <td><img src="assets/artwork.jpg" alt="yuri cover art" width="150"></td>
+  </tr>
+</table>
 
 simple, sweet, and quick library/daemon for handling cryptocurrency payments in go
 
