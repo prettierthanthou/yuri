@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"flag"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -31,8 +30,12 @@ func main() {
 		return
 	}
 
+	if conf.Debug {
+		slog.SetLogLoggerLevel(slog.LevelDebug)
+	}
+
+	slog.Debug("parsed configuration", "config", conf.String())
 	slog.Info("starting yurid")
-	fmt.Print(conf.String())
 
 	wrappedPricingProviders := make([]yuri.PriceProvider, 0, len(conf.PricingProviders))
 	for _, provider := range conf.PricingProviders {

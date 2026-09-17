@@ -28,7 +28,7 @@ const exampleUsage = `yurid \
 	-monero-host localhost:28081/json_rpc \
  	-monero-username foo \
 	-monero-password bar \
-	-database postgresql
+	-database postgresql \
 	-database-dsn postgresql://root:toor@localhost/yurid
 `
 
@@ -107,6 +107,7 @@ type CryptoConfiguration struct {
 }
 
 type Configuration struct {
+	Debug                bool
 	Addr                 string
 	Chains               []yuri.CryptoProvider
 	PricingProviders     []yuri.PriceProvider
@@ -194,6 +195,9 @@ func (s *pricingProviderSliceFlag) Set(v string) error {
 func ParseConfig() (Configuration, error) {
 	fs := flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
 
+	var debug bool
+	fs.BoolVar(&debug, "debug", false, "enables debugging logs, this will print sensitive data!")
+
 	var addr string
 	fs.StringVar(&addr, "addr", ":6761", "address to bind to")
 
@@ -267,6 +271,7 @@ func ParseConfig() (Configuration, error) {
 	}
 
 	return Configuration{
+		Debug:                debug,
 		Addr:                 addr,
 		APIToken:             apiToken,
 		Chains:               chains,
