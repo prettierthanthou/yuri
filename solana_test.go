@@ -634,3 +634,32 @@ spl-token transfer \
 		t.Fatalf("AmountPaid=%v", changed.AmountPaid)
 	}
 }
+
+func TestSolanaBatchesGetMultipleAccounts(t *testing.T) {
+	// solana's jsonrpc only allows 100 addresses per `getMultipleAccounts` jsonrpc
+	// call, so we have to batch
+	rpc, _ := solanaHelperCreateEnv(t)
+
+	solana := MustSolana(SolanaOptions{
+		isTest: true,
+		Hooks:  ProviderHooks{func(ctx context.Context, pk1 crypto.PublicKey, pk2 crypto.PrivateKey) error { return nil }},
+		Rpc:    rpc.conf,
+	})
+
+	const amountOfInvoices = 200
+	invoices := make([]Invoice, 0, amountOfInvoices)
+	for range amountOfInvoices {
+		invoices = append(invoices, Invoice{
+			Chain: Solana,
+			// some random sol address, i dont have the priv keys to this
+			Address:    "HhfrqP2xkVcxTFboHNw68MRpirf8zdJ58hDB5msswewD",
+			AmountOwed: big.NewInt(10),
+			AmountPaid: big.NewInt(0),
+			Pending:    true,
+		})
+	}
+
+	if _, err := solana.Poll(t.Context(), invoices); err != nil {
+		t.Fatalf("failed to poll %d invoices: %v", amountOfInvoices, err)
+	}
+}

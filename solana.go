@@ -248,9 +248,8 @@ func (s solanaProvider) Poll(ctx context.Context, invoices []Invoice) ([]Invoice
 
 		cp.AmountPaid = new(big.Int).Set(bal.pending)
 
-		cp.Pending =
-			bal.latest.Cmp(cp.AmountOwed) < 0 &&
-				bal.pending.Cmp(cp.AmountOwed) >= 0
+		cp.Pending = bal.latest.Cmp(cp.AmountOwed) < 0 &&
+			bal.pending.Cmp(cp.AmountOwed) >= 0
 
 		if InvoicePollChanged(inv, cp) {
 			out = append(out, cp)
@@ -274,37 +273,47 @@ type multipleAccountsResp struct {
 	} `json:"value"`
 }
 
+// Solana's getMultipleAccounts RPC method only allows 100 addresses per call.
+const solanaMaxAccountsPerBatch = 100
+
 func (s solanaProvider) rpcMultipleAccounts(
 	ctx context.Context,
 	addrs []string,
 	commitment string,
 ) ([]*big.Int, error) {
-	var resp multipleAccountsResp
-
-	err := RPCDo(ctx, s.jsonRpc, JsonRpcRequest{
-		Method: "getMultipleAccounts",
-		Params: []any{
-			addrs,
-			map[string]any{
-				"encoding":   "base64",
-				"commitment": commitment,
-			},
-		},
-	}, &resp)
-	if err != nil {
-		return nil, err
+	out := make([]*big.Int, len(addrs))
+	for i := range out {
+		out[i] = new(big.Int)
 	}
 
-	out := make([]*big.Int, len(addrs))
+	for start := 0; start < len(addrs); start += solanaMaxAccountsPerBatch {
+		end := min(start+solanaMaxAccountsPerBatch, len(addrs))
 
-	for i := range addrs {
-		out[i] = new(big.Int)
+		chunk := addrs[start:end]
 
-		if i >= len(resp.Value) || resp.Value[i] == nil {
-			continue
+		var resp multipleAccountsResp
+
+		err := RPCDo(ctx, s.jsonRpc, JsonRpcRequest{
+			Method: "getMultipleAccounts",
+			Params: []any{
+				chunk,
+				map[string]any{
+					"encoding":   "base64",
+					"commitment": commitment,
+				},
+			},
+		}, &resp)
+		if err != nil {
+			return nil, fmt.Errorf("chunk %d|%d failed: %w", start, end, err)
 		}
 
-		out[i].SetUint64(resp.Value[i].Lamports)
+		for i := range chunk {
+			if i >= len(resp.Value) || resp.Value[i] == nil {
+				continue
+			}
+
+			out[start+i].SetUint64(resp.Value[i].Lamports)
+		}
 	}
 
 	return out, nil
@@ -321,43 +330,50 @@ func (s solanaProvider) rpcMultipleTokenAccounts(
 	addrs []string,
 	commitment string,
 ) ([]*big.Int, error) {
-	var resp multipleTokenResp
-
-	err := RPCDo(ctx, s.jsonRpc, JsonRpcRequest{
-		Method: "getMultipleAccounts",
-		Params: []any{
-			addrs,
-			map[string]any{
-				"encoding":   "base64",
-				"commitment": commitment,
-			},
-		},
-	}, &resp)
-	if err != nil {
-		return nil, err
+	out := make([]*big.Int, len(addrs))
+	for i := range out {
+		out[i] = new(big.Int)
 	}
 
-	out := make([]*big.Int, len(addrs))
+	for start := 0; start < len(addrs); start += solanaMaxAccountsPerBatch {
+		end := min(start+solanaMaxAccountsPerBatch, len(addrs))
 
-	for i := range addrs {
-		out[i] = new(big.Int)
+		chunk := addrs[start:end]
 
-		if i >= len(resp.Value) || resp.Value[i] == nil {
-			continue
-		}
+		var resp multipleTokenResp
 
-		acct := resp.Value[i]
-		if len(acct.Data) == 0 {
-			continue
-		}
-
-		raw, err := base64.StdEncoding.DecodeString(acct.Data[0])
+		err := RPCDo(ctx, s.jsonRpc, JsonRpcRequest{
+			Method: "getMultipleAccounts",
+			Params: []any{
+				chunk,
+				map[string]any{
+					"encoding":   "base64",
+					"commitment": commitment,
+				},
+			},
+		}, &resp)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("chunk %d|%d failed: %w", start, end, err)
 		}
 
-		if len(raw) >= 72 {
-			out[i].SetUint64(binary.LittleEndian.Uint64(raw[64:72]))
+		for i := range chunk {
+			if i >= len(resp.Value) || resp.Value[i] == nil {
+				continue
+			}
+
+			acct := resp.Value[i]
+			if len(acct.Data) == 0 {
+				continue
+			}
+
+			raw, err := base64.StdEncoding.DecodeString(acct.Data[0])
+			if err != nil {
+				return nil, err
+			}
+
+			if len(raw) >= 72 {
+				out[start+i].SetUint64(binary.LittleEndian.Uint64(raw[64:72]))
+			}
 		}
 	}
 
