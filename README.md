@@ -1,7 +1,7 @@
 <table>
   <tr>
-    <td><h1>yuri</h1></td>
     <td><img src="assets/artwork.jpg" alt="yuri cover art" width="150"></td>
+    <td><h1>yuri</h1></td>
   </tr>
 </table>
 
