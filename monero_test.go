@@ -124,7 +124,7 @@ func TestMoneroChain(t *testing.T) {
 
 func TestMoneroDecimals(t *testing.T) {
 	if got := NewMonero(JsonRpcClientConfig{}).Decimals(); got != 12 {
-		t.Fatalf("Decimals() = %q, want %q", got, 12)
+		t.Fatalf("Decimals() = %d, want %d", got, 12)
 	}
 }
 
