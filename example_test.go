@@ -129,11 +129,11 @@ func ExampleNFT() {
 		log.Fatalf("failed to create NFT invoice: %+v", err)
 	}
 
-	fmt.Printf("owed = %s symbol = %s address length = %d\n",
-		inv.AmountOwed, inv.Token.Symbol, len(inv.Address))
+	fmt.Printf("owed = %s symbol = %s\n",
+		inv.AmountOwed, inv.Token.Symbol)
 
 	// Output:
-	// owed = 1 symbol = __YURI_NFT__ address length = 44
+	// owed = 1 symbol = __YURI_NFT__
 }
 
 // Example_storage shows what bringing your own storage looks like.
