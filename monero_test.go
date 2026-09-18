@@ -176,8 +176,7 @@ func moneroGenerateBlocks(t *testing.T, daemonRpc JsonRpcClient, addr string, bl
 // running it when attempting to run the Monero tests
 // is less likely (via --run)
 //
-// TODO: fix the fact this takes ~20 seconds to run.
-// this aids. not my main issue right now though.
+// NOTE: kept shorter by mining only 70 blocks (minimum needed for ring size 16).
 
 func TestPollMonero(t *testing.T) {
 	_, _, _, merchantJsonRpc, customerJsonRpc, daemonJsonRpc := moneroHelperCreateFullEnv(t)
@@ -199,12 +198,12 @@ func TestPollMonero(t *testing.T) {
 	}
 
 	start := time.Now()
-	// Mine enough blocks for the customer to accumulate many unlocked coinbase
-	// outputs. Monero locks each coinbase for 60 confirmations, and a single
-	// unlocked coinbase output cannot be spent by monero-wallet-rpc's transfer
-	// ("not enough outputs to use"). Mining 120 blocks unlocks ~60 outputs.
-	moneroGenerateBlocks(t, daemonJsonRpc, getCustomerAddressResp.Address, 120)
-	t.Log("120 blocks:", time.Since(start))
+	// Mine enough blocks for the customer to accumulate enough unlocked
+	// coinbase outputs. Monero locks each coinbase for 60 confirmations.
+	// Mining 70 blocks unlocks ~10 outputs, which is the minimum needed for
+	// a ring-signature spend (ring size 16).
+	moneroGenerateBlocks(t, daemonJsonRpc, getCustomerAddressResp.Address, 70)
+	t.Log("70 blocks:", time.Since(start))
 
 	if _, err := customerJsonRpc.Do(context.Background(), JsonRpcRequest{
 		Method: "refresh",
