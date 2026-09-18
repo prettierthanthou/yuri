@@ -190,6 +190,8 @@ func TestBitcoinDecimals(t *testing.T) {
 }
 
 func TestBitcoinCreateAddress(t *testing.T) {
+	t.Parallel()
+
 	rpc := bitcoinHelperCreateEnv(t)
 
 	p := NewBitcoin(JsonRpcClientConfig{
@@ -211,6 +213,8 @@ func TestBitcoinCreateAddress(t *testing.T) {
 }
 
 func TestBitcoinPoll(t *testing.T) {
+	t.Parallel()
+
 	node := bitcoinHelperCreateEnv(t)
 
 	// wallets

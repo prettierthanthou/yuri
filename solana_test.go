@@ -270,6 +270,8 @@ func pollUntil(t *testing.T, ctx context.Context, provider CryptoProvider, invoi
 }
 
 func TestSolanaCreateAddressAndPoll(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	rpc, _ := solanaHelperCreateEnv(t)
 
@@ -399,6 +401,8 @@ func solanaWaitForFinalizedSignature(ctx context.Context, rpc JsonRpcClient, sig
 }
 
 func TestSolanaTokenPoll(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	sol, container := solanaHelperCreateEnv(t)
@@ -523,6 +527,8 @@ spl-token transfer \
 }
 
 func TestSolanaNFTPoll(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	sol, container := solanaHelperCreateEnv(t)
@@ -636,6 +642,8 @@ spl-token transfer \
 }
 
 func TestSolanaBatchesGetMultipleAccounts(t *testing.T) {
+	t.Parallel()
+
 	// solana's jsonrpc only allows 100 addresses per `getMultipleAccounts` jsonrpc
 	// call, so we have to batch
 	rpc, _ := solanaHelperCreateEnv(t)

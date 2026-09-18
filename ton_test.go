@@ -68,6 +68,8 @@ func (f *fakeChainClient) JettonBalance(
 }
 
 func TestTonProviderCreateAddress(t *testing.T) {
+	t.Parallel()
+
 	const expectedTonAddr = "ton123"
 	client := &fakeChainClient{
 		address: expectedTonAddr,
@@ -85,6 +87,8 @@ func TestTonProviderCreateAddress(t *testing.T) {
 }
 
 func TestTonProviderPollNativeBalanceChanged(t *testing.T) {
+	t.Parallel()
+
 	client := &fakeChainClient{
 		block:  &chainBlock{},
 		native: big.NewInt(100),
@@ -128,6 +132,8 @@ func TestTonProviderPollNativeBalanceChanged(t *testing.T) {
 }
 
 func TestTonProviderPollNoChanges(t *testing.T) {
+	t.Parallel()
+
 	client := &fakeChainClient{
 		block:  &chainBlock{},
 		native: big.NewInt(2),
@@ -154,6 +160,8 @@ func TestTonProviderPollNoChanges(t *testing.T) {
 }
 
 func TestTonProviderPollJettonBalanceChanged(t *testing.T) {
+	t.Parallel()
+
 	client := &fakeChainClient{
 		block:  &chainBlock{},
 		jetton: big.NewInt(42),
@@ -190,6 +198,8 @@ func TestTonProviderPollJettonBalanceChanged(t *testing.T) {
 }
 
 func TestTonProviderPollNFTReceived(t *testing.T) {
+	t.Parallel()
+
 	client := &fakeChainClient{
 		block:    &chainBlock{},
 		nftOwner: "addr",
@@ -245,6 +255,8 @@ func TestTonProviderPollNFTReceived(t *testing.T) {
 }
 
 func TestTonProviderPollNFTNotReceived(t *testing.T) {
+	t.Parallel()
+
 	client := &fakeChainClient{
 		block:    &chainBlock{},
 		nftOwner: "different-owner",

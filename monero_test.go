@@ -117,12 +117,16 @@ func moneroHelperCreateFullEnv(t *testing.T) (cModerod *yuritest.Container, cWal
 }
 
 func TestMoneroChain(t *testing.T) {
+	t.Parallel()
+
 	if got := NewMonero(JsonRpcClientConfig{}).Chain(); got != Monero {
 		t.Fatalf("Name() = %q, want %q", got, Monero)
 	}
 }
 
 func TestMoneroDecimals(t *testing.T) {
+	t.Parallel()
+
 	if got := NewMonero(JsonRpcClientConfig{}).Decimals(); got != 12 {
 		t.Fatalf("Decimals() = %d, want %d", got, 12)
 	}
@@ -130,6 +134,8 @@ func TestMoneroDecimals(t *testing.T) {
 
 // TestMoneroCreateAddress tests that [monero.CreateAddress] creates a new address
 func TestMoneroCreateAddress(t *testing.T) {
+	t.Parallel()
+
 	_, _, _, walletJsonRpc, _, _ := moneroHelperCreateFullEnv(t)
 	moneroProvider := NewMonero(walletJsonRpc.conf)
 
@@ -179,6 +185,8 @@ func moneroGenerateBlocks(t *testing.T, daemonRpc JsonRpcClient, addr string, bl
 // NOTE: kept shorter by mining only 70 blocks (minimum needed for ring size 16).
 
 func TestPollMonero(t *testing.T) {
+	t.Parallel()
+
 	_, _, _, merchantJsonRpc, customerJsonRpc, daemonJsonRpc := moneroHelperCreateFullEnv(t)
 
 	type getAddress struct {

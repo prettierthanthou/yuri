@@ -194,6 +194,8 @@ func TestEthereumSupportsNFTs(t *testing.T) {
 }
 
 func TestEthereumCreateAddressAndPoll(t *testing.T) {
+	t.Parallel()
+
 	rpc, accounts := ethereumHelperCreateEnv(t)
 
 	provider := NewEthereum(JsonRpcClientConfig{
@@ -525,6 +527,8 @@ func TestEthereumPollIsolatesInvoiceErrors(t *testing.T) {
 }
 
 func TestEthereumPollPendingBalance(t *testing.T) {
+	t.Parallel()
+
 	rpc, accounts := ethereumHelperCreateEnv(t)
 	provider := NewEthereum(JsonRpcClientConfig{
 		Host: rpc.conf.Host,
@@ -600,6 +604,7 @@ func bigInt(t *testing.T, v int64) *big.Int {
 }
 
 func TestEthereumCreateAddressAndPollERC721(t *testing.T) {
+	t.Parallel()
 	rpc, accounts := ethereumHelperCreateEnv(t)
 
 	provider := NewEthereum(JsonRpcClientConfig{
