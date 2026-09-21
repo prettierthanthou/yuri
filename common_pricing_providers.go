@@ -144,15 +144,18 @@ func getJSON(ctx context.Context, client *http.Client, raw string, out any) erro
 	return parseBody(resp, out)
 }
 
-func buildURL(base, path string, query map[string]string) string {
-	u, _ := url.Parse(base)
+func buildURL(base, path string, query map[string]string) (string, error) {
+	u, err := url.Parse(base)
+	if err != nil {
+		return "", fmt.Errorf("invalid base URL %q: %w", base, err)
+	}
 	u.Path = path
 	q := u.Query()
 	for k, v := range query {
 		q.Set(k, v)
 	}
 	u.RawQuery = q.Encode()
-	return u.String()
+	return u.String(), nil
 }
 
 func pickRate(m map[string]float64, keys ...string) (float64, bool) {
@@ -268,10 +271,13 @@ func (p coinGeckoProvider) Get(ctx context.Context, currency Currency, chain str
 		return geckoToken(ctx, httpClient(p.client), currency, chain, token)
 	}
 
-	raw := buildURL("https://api.coingecko.com", "/api/v3/simple/price", map[string]string{
+	raw, err := buildURL("https://api.coingecko.com", "/api/v3/simple/price", map[string]string{
 		"ids":           strings.ToLower(chain),
 		"vs_currencies": strings.ToLower(currency.Code),
 	})
+	if err != nil {
+		return -1, fmt.Errorf("building coingecko url: %w", err)
+	}
 
 	var parsed map[string]map[string]float64
 	if err := getJSON(ctx, httpClient(p.client), raw, &parsed); err != nil {
@@ -292,10 +298,13 @@ func (p coinGeckoProvider) Get(ctx context.Context, currency Currency, chain str
 }
 
 func geckoToken(ctx context.Context, client *http.Client, currency Currency, chain string, token Token) (int64, error) {
-	raw := buildURL("https://api.coingecko.com", "/api/v3/simple/token_price/"+strings.ToLower(chain), map[string]string{
+	raw, err := buildURL("https://api.coingecko.com", "/api/v3/simple/token_price/"+strings.ToLower(chain), map[string]string{
 		"contract_addresses": token.Contract,
 		"vs_currencies":      strings.ToLower(currency.Code),
 	})
+	if err != nil {
+		return -1, fmt.Errorf("building coingecko token url: %w", err)
+	}
 
 	var parsed map[string]map[string]float64
 	if err := getJSON(ctx, client, raw, &parsed); err != nil {
@@ -334,18 +343,38 @@ func (p marketProvider) Get(ctx context.Context, currency Currency, chain string
 	requestURL := p.url
 	switch p.kind {
 	case "bitnob":
-		requestURL = buildURL(p.url, "/api/v1/rates/"+strings.ToLower(market)+"/price", nil)
+		urlStr, err := buildURL(p.url, "/api/v1/rates/"+strings.ToLower(market)+"/price", nil)
+		if err != nil {
+			return -1, fmt.Errorf("building bitnob url: %w", err)
+		}
+		requestURL = urlStr
 	case "bylls":
-		requestURL = buildURL(p.url, "/api/price", map[string]string{
+		urlStr, err := buildURL(p.url, "/api/price", map[string]string{
 			"from_currency": market,
 			"to_currency":   strings.ToUpper(currency.Code),
 		})
+		if err != nil {
+			return -1, fmt.Errorf("building bylls url: %w", err)
+		}
+		requestURL = urlStr
 	case "freecurrencyrates":
-		requestURL = buildURL(p.url, "/v1/currencies/"+strings.ToLower(market)+".min.json", nil)
+		urlStr, err := buildURL(p.url, "/v1/currencies/"+strings.ToLower(market)+".min.json", nil)
+		if err != nil {
+			return -1, fmt.Errorf("building freecurrencyrates url: %w", err)
+		}
+		requestURL = urlStr
 	case "yadio":
-		requestURL = buildURL(p.url, "/exrates/"+market, nil)
+		urlStr, err := buildURL(p.url, "/exrates/"+market, nil)
+		if err != nil {
+			return -1, fmt.Errorf("building yadio url: %w", err)
+		}
+		requestURL = urlStr
 	case "buda":
-		requestURL = buildURL(p.url, "/api/v2/markets/"+strings.ToLower(market)+"-"+strings.ToLower(currency.Code)+"/ticker", nil)
+		urlStr, err := buildURL(p.url, "/api/v2/markets/"+strings.ToLower(market)+"-"+strings.ToLower(currency.Code)+"/ticker", nil)
+		if err != nil {
+			return -1, fmt.Errorf("building buda url: %w", err)
+		}
+		requestURL = urlStr
 	}
 
 	var payload any
