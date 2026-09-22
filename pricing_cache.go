@@ -27,6 +27,7 @@ type priceCacheKey struct {
 type cachedPrice struct {
 	value  int64
 	expiry time.Time
+	err    error
 }
 
 func NewCachedPriceProvider(inner PriceProvider) PriceProvider {
@@ -65,24 +66,25 @@ func (p *cachedPriceProvider) Get(ctx context.Context, currency Currency, chain 
 	p.mu.Lock()
 	if item, ok := p.cache[key]; ok && now.Before(item.expiry) {
 		value := item.value
+		err := item.err
 		p.mu.Unlock()
-		return value, nil
+		return value, err
 	}
 	p.mu.Unlock()
 
 	value, err := p.inner.Get(ctx, currency, chain, token)
-	if err != nil {
-		return value, err
-	}
+
+	now = time.Now()
 
 	p.mu.Lock()
 	p.cache[key] = cachedPrice{
 		value:  value,
 		expiry: now.Add(p.ttl),
+		err:    err,
 	}
 	p.mu.Unlock()
 
-	return value, nil
+	return value, err
 }
 
 func stringsKey(s string) string {
