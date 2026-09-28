@@ -1,4 +1,4 @@
-this is a small subset from solana-go, and is licensed under the MIT license.
+this is a small subset from solana-go, and is licensed under the Apache License.
 
 source: https://github.com/solana-foundation/solana-go/tree/main/base58
 copied license: [LICENSE](./LICENSE)
