@@ -42,6 +42,12 @@ type Invoice struct {
 //
 // This is behaviour you should expect!
 func (i Invoice) Paid() bool {
+	if i.AmountPaid == nil || i.AmountOwed == nil {
+		// prevent potentional panics from
+		// Invoice{}.Paid() being called by idiots
+		return false
+	}
+
 	if i.Pending {
 		// if we are pending at all we are in fact
 		// not fully paid and ready to act on this.
