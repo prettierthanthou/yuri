@@ -78,7 +78,7 @@ func (c *tonChainClient) NativeBalance(
 	}
 
 	account, err := c.api.GetAccount(ctx, block.inner, address)
-	if err != nil {
+	if err != nil || account.State != nil {
 		return nil, fmt.Errorf("failed to get account (%s): %w", addr, err)
 	}
 
