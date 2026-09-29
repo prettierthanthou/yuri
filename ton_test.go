@@ -2,8 +2,12 @@ package yuri
 
 import (
 	"context"
+	"crypto"
+	"errors"
 	"math/big"
 	"testing"
+
+	"github.com/xssnick/tonutils-go/address"
 )
 
 func TestTonChainAndDecimals(t *testing.T) {
@@ -28,6 +32,7 @@ type fakeChainClient struct {
 	jetton *big.Int
 
 	nftOwner string
+	nftErr   error
 
 	err error
 }
@@ -39,6 +44,10 @@ func (f *fakeChainClient) NFTOwner(
 	string,
 	string,
 ) (string, error) {
+	if f.nftErr != nil {
+		return "", f.nftErr
+	}
+
 	return f.nftOwner, f.err
 }
 
@@ -83,6 +92,39 @@ func TestTonProviderCreateAddress(t *testing.T) {
 
 	if addr != expectedTonAddr {
 		t.Fatalf("CreateAddress = %s expected %s", addr, expectedTonAddr)
+	}
+}
+
+func TestTonChainClientCreateAddress(t *testing.T) {
+	t.Parallel()
+
+	// deriving an address is pure key derivation, it must work without
+	// ever touching the liteclient pool.
+	c := &tonChainClient{}
+
+	hookCalls := 0
+	hooks := ProviderHooks{
+		OnNewAddress: func(context.Context, crypto.PublicKey, crypto.PrivateKey) error {
+			hookCalls++
+			return nil
+		},
+	}
+
+	addr, err := c.CreateAddress(context.Background(), hooks)
+	if err != nil {
+		t.Fatalf("CreateAddress = %v expected = nil", err)
+	}
+
+	if hookCalls != 1 {
+		t.Fatalf("OnNewAddress calls = %d expected = 1", hookCalls)
+	}
+
+	if addr == "" {
+		t.Fatal("CreateAddress returned an empty address")
+	}
+
+	if _, err := address.ParseAddr(addr); err != nil {
+		t.Fatalf("CreateAddress returned an unparseable address (%s): %v", addr, err)
 	}
 }
 
@@ -284,5 +326,62 @@ func TestTonProviderPollNFTNotReceived(t *testing.T) {
 
 	if len(updated) != 0 {
 		t.Fatalf("expected no update, got %+v", updated)
+	}
+}
+
+func TestTonProviderPollWithoutBlockErrors(t *testing.T) {
+	t.Parallel()
+
+	// a chain client which cannot produce a block must fail loudly rather
+	// than hand a nil block to every balance lookup below it.
+	client := &fakeChainClient{native: big.NewInt(100)}
+	p := tonProvider{api: client}
+
+	invoice := Invoice{
+		Address:    "addr",
+		AmountPaid: big.NewInt(0),
+		AmountOwed: big.NewInt(10),
+		Chain:      Ton,
+	}
+
+	updated, err := p.Poll(context.Background(), []Invoice{invoice})
+	if err == nil {
+		t.Fatal("Poll without a block expected an error, got nil")
+	}
+
+	if updated != nil {
+		t.Fatalf("Poll = %+v expected nil", updated)
+	}
+}
+
+func TestTonProviderPollNFTErrorIsReported(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeChainClient{
+		block:  &chainBlock{},
+		nftErr: errors.New("liteserver unavailable"),
+	}
+
+	p := tonProvider{api: client}
+
+	invoice := Invoice{
+		Address: "addr",
+		Token: Token{
+			Symbol:   NftSymbol,
+			Contract: "collection|||123",
+			Decimals: 1,
+		},
+		AmountPaid: big.NewInt(0),
+		AmountOwed: big.NewInt(1),
+		Chain:      Ton,
+	}
+
+	updated, err := p.Poll(context.Background(), []Invoice{invoice})
+	if err == nil {
+		t.Fatal("Poll expected the NFT lookup failure to be reported, got nil")
+	}
+
+	if len(updated) != 0 {
+		t.Fatalf("Poll = %+v expected no updated invoices", updated)
 	}
 }

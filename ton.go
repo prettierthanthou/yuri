@@ -39,12 +39,21 @@ var _ chainClient = &tonChainClient{}
 
 type tonChainClient struct {
 	api *ton.APIClient
+	// 0 means mainnet, see TonOptions.NetworkGlobalID
+	networkGlobalID int32
 }
 
 func (c *tonChainClient) CreateAddress(ctx context.Context, hooks ProviderHooks) (string, error) {
 	seed := wallet.NewSeed()
 
-	w, err := wallet.FromSeedWithOptions(c.api, seed, wallet.V5R1Final)
+	globalID := c.networkGlobalID
+	if globalID == 0 {
+		globalID = wallet.MainnetGlobalID
+	}
+
+	w, err := wallet.FromSeedWithOptions(c.api, seed, wallet.ConfigV5R1Final{
+		NetworkGlobalID: globalID,
+	})
 	if err != nil {
 		return "", err
 	}
@@ -64,6 +73,10 @@ func (c *tonChainClient) CurrentBlock(ctx context.Context) (*chainBlock, error) 
 		return nil, err
 	}
 
+	if b == nil {
+		return nil, errors.New("no masterchain block returned by the ton api")
+	}
+
 	return &chainBlock{inner: b}, nil
 }
 
@@ -78,11 +91,17 @@ func (c *tonChainClient) NativeBalance(
 	}
 
 	account, err := c.api.GetAccount(ctx, block.inner, address)
-	if err != nil || account.State != nil {
+	if err != nil {
 		return nil, fmt.Errorf("failed to get account (%s): %w", addr, err)
 	}
 
-	return new(big.Int).Set(account.State.Balance.Nano()), nil
+	if account == nil || account.State == nil {
+		// the address has never been funded, so it has no state at all and
+		// its balance is 0. dereferencing State here panics the poll cycle.
+		return big.NewInt(0), nil
+	}
+
+	return account.State.Balance.Nano(), nil
 }
 
 func (c *tonChainClient) JettonBalance(
@@ -110,6 +129,11 @@ func (c *tonChainClient) JettonBalance(
 	balance, err := wallet.GetBalanceAtBlock(ctx, block.inner)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get jetton balance (%s): %w", addr, err)
+	}
+
+	if balance == nil {
+		// a jetton wallet which does not exist yet holds nothing
+		return big.NewInt(0), nil
 	}
 
 	return new(big.Int).Set(balance), nil
@@ -158,6 +182,12 @@ func (c *tonChainClient) NFTOwner(
 type TonOptions struct {
 	Client chainClient
 	Hooks  ProviderHooks
+
+	// NetworkGlobalID is the TON network id that wallets are derived for,
+	// see [wallet.MainnetGlobalID] and [wallet.TestnetGlobalID].
+	// 0 means mainnet, or testnet when the testnet config URL is used.
+	// Only applies when Client is nil.
+	NetworkGlobalID int32
 }
 
 const (
@@ -204,7 +234,15 @@ func NewTonWithConfigURL(opts TonOptions, configUrl string) (tonProvider, error)
 		}
 
 		api := ton.NewAPIClient(client)
-		opts.Client = &tonChainClient{api: api}
+
+		// a wallet derived with the wrong network id cannot send on that
+		// network, so follow the config URL unless told otherwise
+		globalID := opts.NetworkGlobalID
+		if globalID == 0 && configUrl == TonTestnetPublic {
+			globalID = wallet.TestnetGlobalID
+		}
+
+		opts.Client = &tonChainClient{api: api, networkGlobalID: globalID}
 	}
 
 	if opts.Hooks.OnNewAddress == nil {
@@ -251,6 +289,10 @@ func (t tonProvider) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, e
 		return nil, err
 	}
 
+	if block == nil {
+		return nil, errors.New("no ton block to poll against")
+	}
+
 	out := make([]Invoice, 0, len(invoices))
 
 	for _, inv := range invoices {
@@ -280,7 +322,8 @@ func (t tonProvider) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, e
 				)
 			}
 
-			owner, err := t.api.NFTOwner(
+			var owner string
+			owner, err = t.api.NFTOwner(
 				ctx,
 				block,
 				nft.Collection,
