@@ -271,9 +271,8 @@ func (e ethereumLike) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, 
 		}
 
 		updatedInvoice.AmountPaid = new(big.Int).Set(bal.pending)
-		updatedInvoice.Pending =
-			bal.safe.Cmp(updatedInvoice.AmountOwed) < 0 &&
-				bal.pending.Cmp(updatedInvoice.AmountOwed) >= 0
+		updatedInvoice.Pending = bal.safe.Cmp(updatedInvoice.AmountOwed) < 0 &&
+			bal.pending.Cmp(updatedInvoice.AmountOwed) >= 0
 
 		if InvoicePollChanged(invoices[i], updatedInvoice) {
 			newInvoices = append(newInvoices, updatedInvoice)

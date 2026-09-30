@@ -198,9 +198,8 @@ func (b bitcoinLike) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, e
 
 		updated := invoices[idx].Clone()
 		updated.AmountPaid = new(big.Int).Set(bal.total)
-		updated.Pending =
-			updated.AmountPaid.Cmp(updated.AmountOwed) >= 0 &&
-				bal.confirmed.Cmp(updated.AmountOwed) < 0
+		updated.Pending = updated.AmountPaid.Cmp(updated.AmountOwed) >= 0 &&
+			bal.confirmed.Cmp(updated.AmountOwed) < 0
 
 		if InvoicePollChanged(invoices[idx], updated) {
 			newInvoices = append(newInvoices, updated)
