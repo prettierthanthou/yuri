@@ -3,7 +3,6 @@ package yuri
 import (
 	"context"
 	"errors"
-	"maps"
 	"math/big"
 	"slices"
 	"sync"
@@ -67,8 +66,7 @@ func (i Invoice) Clone() Invoice {
 
 	var metaCopied map[string]any
 	if i.Metadata != nil {
-		metaCopied = make(map[string]any, len(i.Metadata))
-		maps.Copy(metaCopied, i.Metadata)
+		metaCopied = deepCopyMap(i.Metadata)
 	}
 
 	return Invoice{
@@ -176,4 +174,30 @@ func (i *InMemoryStorage) UpdateInvoices(_ context.Context, invoices []Invoice) 
 	}
 
 	return nil
+}
+
+// deepCopyMap performs a recursive deep copy of a map[string]any,
+// including nested maps and slices, so clones do not alias the
+// original's metadata.
+func deepCopyMap(src map[string]any) map[string]any {
+	out := make(map[string]any, len(src))
+	for k, v := range src {
+		out[k] = deepCopyValue(v)
+	}
+	return out
+}
+
+func deepCopyValue(v any) any {
+	switch val := v.(type) {
+	case map[string]any:
+		return deepCopyMap(val)
+	case []any:
+		out := make([]any, len(val))
+		for i, e := range val {
+			out[i] = deepCopyValue(e)
+		}
+		return out
+	default:
+		return val
+	}
 }
