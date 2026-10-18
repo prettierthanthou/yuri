@@ -67,6 +67,21 @@ func NewDatabase(conf DatabaseConfig) (*database, error) {
 		return nil, err
 	}
 
+	if conf.Type == DatabaseTypeSqlite {
+		db.SetMaxOpenConns(1)
+		db.SetMaxIdleConns(1)
+		for _, pragma := range []string{
+			"PRAGMA journal_mode=WAL",
+			"PRAGMA synchronous=NORMAL",
+			"PRAGMA foreign_keys=ON",
+			"PRAGMA busy_timeout=5000",
+		} {
+			if _, err := db.Exec(pragma); err != nil {
+				return nil, fmt.Errorf("setting %s: %w", pragma, err)
+			}
+		}
+	}
+
 	slog.Debug("ensuring database schema")
 	database := &database{conf: conf, db: db}
 	if err := database.ensureSchema(); err != nil {
