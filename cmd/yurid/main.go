@@ -86,6 +86,10 @@ func main() {
 		activeChainNames = append(activeChainNames, string(chain.Chain()))
 	}
 
+	if conf.APIToken == "" {
+		slog.Warn("API token is not set; REST API is unauthenticated")
+	}
+
 	api := yurid.NewAPI(database, instance, activeChainNames, conf.APIToken, events)
 
 	srv := &http.Server{
