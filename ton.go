@@ -294,6 +294,7 @@ func (t tonProvider) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, e
 	}
 
 	out := make([]Invoice, 0, len(invoices))
+	var errs []error
 
 	for _, inv := range invoices {
 		select {
@@ -316,10 +317,8 @@ func (t tonProvider) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, e
 			nft, ok := NftIdentifierFromString(updated.Token.Contract)
 
 			if !ok {
-				return nil, fmt.Errorf(
-					"invalid nft identifier %s",
-					updated.Token.Contract,
-				)
+				errs = append(errs, fmt.Errorf("invalid nft identifier %s", updated.Token.Contract))
+				continue
 			}
 
 			var owner string
@@ -330,7 +329,7 @@ func (t tonProvider) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, e
 				nft.Asset,
 			)
 
-			if err == nil && owner == updated.Address {
+			if err == nil && tonAddressesEqual(owner, updated.Address) {
 				updated.AmountPaid = big.NewInt(1)
 			} else {
 				updated.AmountPaid = big.NewInt(0)
@@ -346,7 +345,8 @@ func (t tonProvider) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, e
 		}
 
 		if err != nil {
-			return nil, err
+			errs = append(errs, fmt.Errorf("invoice %s: %w", inv.Address, err))
+			continue
 		}
 
 		updated.Pending = false
@@ -356,5 +356,22 @@ func (t tonProvider) Poll(ctx context.Context, invoices []Invoice) ([]Invoice, e
 		}
 	}
 
+	if len(errs) > 0 {
+		return out, errors.Join(errs...)
+	}
 	return out, nil
+}
+
+// tonAddressesEqual compares two TON addresses by their (workchain, hash)
+// bytes, ignoring bounceable/non-bounceable and other textual variants.
+func tonAddressesEqual(a, b string) bool {
+	aa, err1 := address.ParseAddr(a)
+	bb, err2 := address.ParseAddr(b)
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	if aa.Workchain() != bb.Workchain() {
+		return false
+	}
+	return string(aa.Data()) == string(bb.Data())
 }
