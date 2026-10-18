@@ -261,7 +261,7 @@ func (a *API) handleNew(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Chain = chain
 
-	if req.AmountFiat.Minor <= 0 {
+	if req.Token.Symbol != yuri.NftSymbol && req.AmountFiat.Minor <= 0 {
 		writeError(w, http.StatusBadRequest, "amount cannot be less than or equal to zero", nil)
 		return
 	}
