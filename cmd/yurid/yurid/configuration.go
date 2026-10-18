@@ -141,9 +141,6 @@ func (c Configuration) String() string {
 	fmt.Fprintf(&b, "pricing providers: %s\n", strings.Join(providerNames, ", "))
 
 	fmt.Fprintf(&b, "database: %s\n", c.DatabaseConfig.Type)
-	if c.DatabaseConfig.DSN != "" {
-		fmt.Fprintf(&b, "database DSN: %s\n", c.DatabaseConfig.DSN)
-	}
 
 	return b.String()
 }
