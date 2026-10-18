@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"slices"
@@ -271,8 +272,12 @@ func (p coinGeckoProvider) Get(ctx context.Context, currency Currency, chain str
 		return geckoToken(ctx, httpClient(p.client), currency, chain, token)
 	}
 
+	id, ok := coingeckoChainID(chain)
+	if !ok {
+		return -1, fmt.Errorf("no coingecko id mapping for chain %q", chain)
+	}
 	raw, err := buildURL("https://api.coingecko.com", "/api/v3/simple/price", map[string]string{
-		"ids":           strings.ToLower(chain),
+		"ids":           id,
 		"vs_currencies": strings.ToLower(currency.Code),
 	})
 	if err != nil {
@@ -284,7 +289,7 @@ func (p coinGeckoProvider) Get(ctx context.Context, currency Currency, chain str
 		return -1, err
 	}
 
-	row, ok := parsed[strings.ToLower(chain)]
+	row, ok := parsed[id]
 	if !ok {
 		return -1, ErrChainNotSupported
 	}
@@ -293,8 +298,34 @@ func (p coinGeckoProvider) Get(ctx context.Context, currency Currency, chain str
 	if !ok {
 		return -1, fmt.Errorf("missing price from coingecko response")
 	}
+	if math.IsNaN(rate) || math.IsInf(rate, 0) || rate <= 0 {
+		return -1, fmt.Errorf("invalid price from coingecko response: %v", rate)
+	}
 
 	return currency.ToMinor(rate), nil
+}
+
+// coingeckoChainID maps a yuri Chain name to its CoinGecko coin id.
+func coingeckoChainID(chain string) (string, bool) {
+	id, ok := coingeckoChainIDs[strings.ToLower(strings.TrimSpace(chain))]
+	return id, ok
+}
+
+var coingeckoChainIDs = map[string]string{
+	"bitcoin":   "bitcoin",
+	"litecoin":  "litecoin",
+	"dogecoin":  "dogecoin",
+	"ethereum":  "ethereum",
+	"bnb":       "binancecoin",
+	"polygon":   "matic-network",
+	"avalanche": "avalanche-2",
+	"arbitrum":  "arbitrum",
+	"base":      "base",
+	"optimism":  "optimism",
+	"fantom":    "fantom",
+	"solana":    "solana",
+	"monero":    "monero",
+	"ton":       "the-open-network",
 }
 
 func geckoToken(ctx context.Context, client *http.Client, currency Currency, chain string, token Token) (int64, error) {
@@ -319,6 +350,9 @@ func geckoToken(ctx context.Context, client *http.Client, currency Currency, cha
 	rate, ok := pickRate(row, currency.Code)
 	if !ok {
 		return -1, fmt.Errorf("missing token price from coingecko response")
+	}
+	if math.IsNaN(rate) || math.IsInf(rate, 0) || rate <= 0 {
+		return -1, fmt.Errorf("invalid token price from coingecko response: %v", rate)
 	}
 
 	return currency.ToMinor(rate), nil
