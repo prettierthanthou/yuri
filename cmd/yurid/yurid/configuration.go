@@ -224,7 +224,7 @@ func ParseConfig() (Configuration, error) {
 	fs.BoolVar(&debug, "debug", debug, "enables debugging logs, this will print sensitive data!")
 
 	var addr string
-	addr = ":6761"
+	addr = "127.0.0.1:6761"
 	if v, ok := envString("addr"); ok {
 		addr = v
 	}
