@@ -114,24 +114,32 @@ func decodeJSON(r *http.Request, dst any) error {
 const maxRequestBodySize = 1 << 20 // 1 MiB
 
 type wrappedInvoice struct {
-	Id   string `json:"id"`
-	Paid bool   `json:"paid"`
-	Fiat any    `json:"fiat"`
+	Id        string `json:"id"`
+	Paid      bool   `json:"paid"`
+	Fiat      any    `json:"fiat"`
+	ExpiresAt int64  `json:"expires_at"`
 	yuri.Invoice
 }
 
 func wrapInvoice(id string, inv *yuri.Invoice) wrappedInvoice {
 	cloned := inv.Clone()
 	fiat := cloned.Metadata[yuridInvoiceFiatMetaID]
+	var expiresAt int64
+	if raw, ok := cloned.Metadata[yuridInvoiceExpireyMetaID]; ok {
+		if t, ok := raw.(time.Time); ok {
+			expiresAt = t.UnixMilli()
+		}
+	}
 	delete(cloned.Metadata, yuridInvoiceUUIDMetaId)
 	delete(cloned.Metadata, yuridInvoiceFiatMetaID)
 	delete(cloned.Metadata, yuridInvoiceExpireyMetaID)
 
 	return wrappedInvoice{
-		Id:      id,
-		Paid:    inv.Paid(),
-		Fiat:    fiat,
-		Invoice: cloned,
+		Id:        id,
+		Paid:      inv.Paid(),
+		Fiat:      fiat,
+		ExpiresAt: expiresAt,
+		Invoice:   cloned,
 	}
 }
 
